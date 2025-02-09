@@ -37,5 +37,6 @@ std::vector<Station> ParallelPreprocessor::preprocess_data(
       new_stations.push_back(std::move(station));
     }
   }
+
   return new_stations;
 }

@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <future>
+#include <queue>
 #include <ranges>
 #include <thread>
 #include <vector>
@@ -22,13 +23,13 @@ public:
   /**
    * @brief Construct a new Threadpool object.
    */
-  Threadpool() = default;
+  Threadpool() : Threadpool(std::thread::hardware_concurrency()) {};
 
   /**
-   * @brief Construct a new Threadpool object with specified thread count.
-   * @param thread_count The number of threads in the thread pool.
+   * @brief Construct a new Threadpool object with a custom worker thread count.
+   * @param threadCount The number of worker threads to create.
    */
-  Threadpool(std::size_t thread_count) : mThreadCount(thread_count) {}
+  Threadpool(size_t thread_count);
 
   /**
    * @brief Destroy the Threadpool object, joining all worker threads.
@@ -50,8 +51,9 @@ public:
    * @param other The other Threadpool to move from.
    */
   Threadpool(Threadpool &&other) {
-    mThreadCount = other.mThreadCount;
-    mThreads = std::move(other.mThreads);
+    mWorkers = std::move(other.mWorkers);
+    mTasks = std::move(other.mTasks);
+    mRunning = std::move(other.mRunning);
   }
 
   /**
@@ -62,8 +64,9 @@ public:
    * @return Threadpool& Reference to this Threadpool.
    */
   Threadpool &operator=(Threadpool &&other) {
-    mThreadCount = other.mThreadCount;
-    mThreads = std::move(other.mThreads);
+    mWorkers = std::move(other.mWorkers);
+    mTasks = std::move(other.mTasks);
+    mRunning = std::move(other.mRunning);
     return *this;
   }
 
@@ -81,7 +84,7 @@ public:
    */
   template <class F, class... Args,
             typename U = std::invoke_result_t<F, Args...>>
-  std::future<U> spawn_with_future(F &&f, Args &&...args) {
+  inline std::future<U> spawn_with_future(F &&f, Args &&...args) {
     auto task = std::make_shared<std::packaged_task<U()>>(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...));
     auto res = task->get_future();
@@ -94,7 +97,13 @@ public:
    *
    * @param task The function to execute.
    */
-  void spawn(std::function<void()> task);
+  inline void spawn(std::function<void()> task) {
+    {
+      std::unique_lock<std::mutex> lock(mMutex);
+      mTasks.push(task);
+    }
+    mCondition.notify_one();
+  }
 
   /**
    * @brief Spawn a task without returning a future.
@@ -107,12 +116,13 @@ public:
    * @param args The arguments to pass to the function.
    */
   template <typename U, typename F, typename... Args>
-  void spawn(F &&f, Args &&...args) {
+  inline void spawn(F &&f, Args &&...args) {
     spawn(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
   }
 
   /**
-   * @brief Join all threads in the thread pool.
+   * @brief Gracefully stop the thread pool and join all worker threads
+   * (automatically called in destructor).
    */
   void join();
 
@@ -134,7 +144,7 @@ public:
   template <std::ranges::forward_range R,
             typename T = std::ranges::range_value_t<R>, typename F,
             typename U = std::invoke_result_t<F, T &>>
-  std::vector<std::future<U>> transform(const R &range, F functor) {
+  inline std::vector<std::future<U>> transform(const R &range, F functor) {
     return range | std::views::transform([this, &functor](auto item) {
              return spawn_with_future(functor, item);
            }) |
@@ -152,15 +162,18 @@ public:
    */
   template <std::ranges::forward_range R,
             typename T = std::ranges::range_value_t<R>>
-  void for_each(const R &range,
-                std::function<void(const size_t index, T &value)> functor) {
+  inline void
+  for_each(const R &range,
+           std::function<void(const size_t index, T &value)> functor) {
     for (auto &future : transform(range, functor)) {
       future.get();
     }
   }
 
 private:
-  // The vector of threads in the thread pool.
-  std::vector<std::jthread> mThreads;
-  std::size_t mThreadCount = std::thread::hardware_concurrency();
+  std::vector<std::jthread> mWorkers;
+  std::queue<std::function<void()>> mTasks;
+  std::mutex mMutex;
+  std::condition_variable mCondition;
+  bool mRunning = true;
 };
