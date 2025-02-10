@@ -11,9 +11,9 @@
 #include <utility>
 #include <vector>
 
-std::vector<Station>
+Stations
 read_stations(const std::filesystem::path &input_filepath) {
-  std::vector<Station> stations;
+  Stations stations;
 
   std::ifstream input_file(input_filepath);
   if (!input_file.is_open()) {
@@ -72,7 +72,7 @@ read_stations(const std::filesystem::path &input_filepath) {
   return stations;
 }
 
-void fill_measurements(std::vector<Station> &stations,
+void fill_measurements(Stations &stations,
                        const std::filesystem::path &input_filepath) {
   std::ifstream file(input_filepath);
   if (!file.is_open()) {

@@ -77,7 +77,7 @@ StationMonthlyAverages calculate_monthly_averages(const Station &station,
 
 std::pair<std::vector<StationMonthlyAverages>, Outliers>
 SerialOutlierDetector::average_and_find_outliers(
-    const std::vector<Station> &stations) const {
+    const Stations &stations) const {
   std::vector<StationMonthlyAverages> stations_averages;
   Outliers outliers;
 
@@ -91,7 +91,7 @@ SerialOutlierDetector::average_and_find_outliers(
 
 std::pair<std::vector<StationMonthlyAverages>, Outliers>
 ParallelOutlierDetector::average_and_find_outliers(
-    const std::vector<Station> &stations) const {
+    const Stations &stations) const {
   auto results = pool.transform(
       stations | std::ranges::views::enumerate, [&](const auto &item) {
         auto [id, station] = item;

@@ -15,19 +15,19 @@ bool valid_station(const Station &station) {
   return time_span >= 5 && station.measurements.size() / time_span >= 300;
 }
 
-std::vector<Station> SerialPreprocessor::preprocess_data(
-    const std::vector<Station> &stations) const {
+Stations SerialPreprocessor::preprocess_data(
+    const Stations &stations) const {
   return stations | std::views::filter(valid_station) |
          std::ranges::to<std::vector>();
 }
 
-std::vector<Station> ParallelPreprocessor::preprocess_data(
-    const std::vector<Station> &stations) const {
+Stations ParallelPreprocessor::preprocess_data(
+    const Stations &stations) const {
   auto futures = pool.transform(stations, [](const Station &station) {
     return std::make_pair(valid_station(station), station);
   });
 
-  std::vector<Station> new_stations{};
+  Stations new_stations{};
   for (auto &future : futures) {
     auto [valid, station] = future.get();
 

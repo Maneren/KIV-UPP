@@ -27,6 +27,8 @@ public:
   std::vector<Measurement> measurements;
 };
 
+using Stations = std::vector<Station>;
+
 struct Outlier {
   size_t station_id;
   Month month;

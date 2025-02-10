@@ -5,18 +5,18 @@
 
 class Preprocessor {
 public:
-  virtual std::vector<Station>
-  preprocess_data(const std::vector<Station> &) const = 0;
+  virtual Stations
+  preprocess_data(const Stations &) const = 0;
 };
 
 class SerialPreprocessor : public Preprocessor {
 public:
-  std::vector<Station>
-  preprocess_data(const std::vector<Station> &) const override;
+  Stations
+  preprocess_data(const Stations &) const override;
 };
 
 class ParallelPreprocessor : public Preprocessor {
 public:
-  std::vector<Station>
-  preprocess_data(const std::vector<Station> &) const override;
+  Stations
+  preprocess_data(const Stations &) const override;
 };
