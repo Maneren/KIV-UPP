@@ -26,8 +26,6 @@ Threadpool::Threadpool(size_t thread_count) {
   }
 }
 
-// inline void Threadpool::spawn(std::function<void()> task)
-
 void Threadpool::join() {
   {
     std::unique_lock<std::mutex> lock(mMutex);
@@ -36,3 +34,5 @@ void Threadpool::join() {
   mCondition.notify_all();
   mWorkers.clear();
 }
+
+Threadpool pool{};

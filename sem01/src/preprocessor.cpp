@@ -5,12 +5,12 @@
 #include <utility>
 
 bool valid_station(const Station &station) {
-  auto [first_year, last_year] = std::ranges::minmax(
+  const auto [first_year, last_year] = std::ranges::minmax(
       station.measurements | std::views::transform([](auto &measurement) {
         return measurement.year;
       }));
 
-  auto time_span = last_year - first_year;
+  const auto time_span = last_year - first_year;
 
   return time_span >= 5 && station.measurements.size() / time_span >= 300;
 }
@@ -23,8 +23,6 @@ std::vector<Station> SerialPreprocessor::preprocess_data(
 
 std::vector<Station> ParallelPreprocessor::preprocess_data(
     const std::vector<Station> &stations) const {
-  Threadpool pool{};
-
   auto futures = pool.transform(stations, [](const Station &station) {
     return std::make_pair(valid_station(station), station);
   });

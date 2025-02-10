@@ -177,3 +177,5 @@ private:
   std::condition_variable mCondition;
   bool mRunning = true;
 };
+
+extern Threadpool pool;
