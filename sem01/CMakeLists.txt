@@ -15,6 +15,7 @@ add_executable(
   meteo
   src/main.cpp
   src/config.cpp
+  src/months.cpp
   src/preprocessor.cpp
   src/threadpool.cpp
   src/utils.cpp

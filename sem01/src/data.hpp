@@ -1,13 +1,14 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
 
 using Year = short;
-using Month = unsigned char;
-using Day = unsigned char;
+using Month = short;
+using Day = short;
 
 using Temperature = float;
 
@@ -25,3 +26,16 @@ public:
   std::pair<double, double> location;
   std::vector<Measurement> measurements;
 };
+
+struct Outlier {
+  size_t station_id;
+  Month month;
+  Year year;
+  Temperature difference;
+};
+
+using Outliers = std::vector<Outlier>;
+
+using MonthlyAverage = std::pair<Year, Temperature>;
+using MonthlyAverages = std::vector<MonthlyAverage>;
+using StationMonthlyAverages = std::array<MonthlyAverages, 12>;

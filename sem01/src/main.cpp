@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "data.hpp"
+#include "months.hpp"
 #include "preprocessor.hpp"
 #include <format>
 #include <fstream>
@@ -170,6 +171,33 @@ int main(int argc, char *argv[]) {
       << "Elapsed time: "
       << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
       << "ms" << std::endl;
+
+  OutlierDetector *detector;
+  if (config.mode() == ProcessingMode::Serial) {
+    detector = new SerialOutlierDetector();
+  } else {
+    detector = new ParallelOutlierDetector();
+  }
+
+  start = std::chrono::high_resolution_clock::now();
+
+  auto [averages, outliers] = detector->average_and_find_outliers(stations);
+
+  elapsed = std::chrono::high_resolution_clock::now() - start;
+  std::cout << "Outliers: " << outliers.size() << std::endl;
+  std::cout
+      << "Elapsed time: "
+      << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
+      << "ms" << std::endl;
+
+  {
+    std::ofstream outlier_file("vykyvy.csv");
+    outlier_file << "id;mesic;rok;rozdil" << std::endl;
+    for (const auto &outlier : outliers) {
+      outlier_file << outlier.station_id << ";" << outlier.month << ";"
+                   << outlier.year << ";" << outlier.difference << std::endl;
+    }
+  }
 
   return 0;
 }
