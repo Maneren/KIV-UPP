@@ -114,22 +114,22 @@ void fill_measurements(std::vector<Station> &stations,
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read year field.");
     }
-    short year = std::stoi(field_buffer);
+    Year year = std::stoi(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read month field.");
     }
-    std::byte month = static_cast<std::byte>(std::stoi(field_buffer));
+    Month month = std::stoi(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read day field.");
     }
-    std::byte day = static_cast<std::byte>(std::stoi(field_buffer));
+    Day day = std::stoi(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read value field.");
     }
-    float value = std::stof(field_buffer);
+    Temperature value = std::stof(field_buffer);
 
     stations[id - 1].measurements.emplace_back(ordinal, year, month, day,
                                                value);

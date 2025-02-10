@@ -5,12 +5,18 @@
 #include <utility>
 #include <vector>
 
+using Year = short;
+using Month = unsigned char;
+using Day = unsigned char;
+
+using Temperature = float;
+
 struct Measurement {
   std::size_t ordinal;
-  short year;
-  std::byte month;
-  std::byte day;
-  float value;
+  Year year;
+  Month month;
+  Day day;
+  Temperature value;
 };
 
 class Station {
