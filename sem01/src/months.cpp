@@ -4,9 +4,6 @@
 #include <ranges>
 #include <utility>
 
-constexpr std::array<int, 12> DAYS_IN_MONTHS{31, 28, 31, 30, 31, 30,
-                                             31, 31, 30, 31, 30, 31};
-
 using StationMonthlyMinmaxes =
     std::array<std::pair<Temperature, Temperature>, 12>;
 

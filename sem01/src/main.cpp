@@ -2,6 +2,7 @@
 #include "data.hpp"
 #include "months.hpp"
 #include "preprocessor.hpp"
+#include "renderer.hpp"
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -11,8 +12,7 @@
 #include <utility>
 #include <vector>
 
-Stations
-read_stations(const std::filesystem::path &input_filepath) {
+Stations read_stations(const std::filesystem::path &input_filepath) {
   Stations stations;
 
   std::ifstream input_file(input_filepath);
@@ -57,14 +57,14 @@ read_stations(const std::filesystem::path &input_filepath) {
     std::string name = std::move(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
-      throw std::runtime_error("Failed to read latitude field.");
-    }
-    float latitude = std::stof(field_buffer);
-
-    if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read longitude field.");
     }
     float longitude = std::stof(field_buffer);
+
+    if (!std::getline(line_stream, field_buffer, ';')) {
+      throw std::runtime_error("Failed to read latitude field.");
+    }
+    float latitude = std::stof(field_buffer);
 
     stations.emplace_back(name, std::make_pair(latitude, longitude));
   }
@@ -137,6 +137,10 @@ void fill_measurements(Stations &stations,
   }
 }
 
+constexpr std::array<std::string_view, 12> MONTHS = {
+    "leden",    "unor",  "brezen", "duben", "kveten",   "cerven",
+    "cervenec", "srpen", "zari",   "rijen", "listopad", "prosinec"};
+
 int main(int argc, char *argv[]) {
   Config config;
   try {
@@ -191,12 +195,34 @@ int main(int argc, char *argv[]) {
       << "ms" << std::endl;
 
   {
-    std::ofstream outlier_file("vykyvy.csv");
+    std::ofstream outlier_file("output/vykyvy.csv");
     outlier_file << "id;mesic;rok;rozdil" << std::endl;
     for (const auto &outlier : outliers) {
       outlier_file << outlier.station_id << ";" << outlier.month << ";"
                    << outlier.year << ";" << outlier.difference << std::endl;
     }
+  }
+
+  Renderer *renderer;
+  if (config.mode() == ProcessingMode::Serial) {
+    renderer = new SerialRenderer();
+  } else {
+    renderer = new ParallelRenderer();
+  }
+
+  start = std::chrono::high_resolution_clock::now();
+
+  const auto svgs = renderer->render_months(stations, averages);
+
+  elapsed = std::chrono::high_resolution_clock::now() - start;
+  std::cout
+      << "Elapsed time: "
+      << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
+      << "ms" << std::endl;
+
+  for (auto [month, svg] : std::views::zip(MONTHS, svgs)) {
+    std::ofstream svg_file(std::format("output/{}.svg", month));
+    svg_file << svg;
   }
 
   return 0;

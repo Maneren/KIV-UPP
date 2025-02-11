@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <future>
 #include <queue>
@@ -93,7 +94,7 @@ public:
   }
 
   /**
-   * @brief Spawn a task without returning a future.
+   * @brief Spawn a task.
    *
    * @param task The function to execute.
    */
@@ -106,7 +107,7 @@ public:
   }
 
   /**
-   * @brief Spawn a task without returning a future.
+   * @brief Spawn a task.
    *
    * @tparam U The return type of the function.
    * @tparam F The type of the function to execute.
@@ -168,6 +169,14 @@ public:
     for (auto &future : transform(range, functor)) {
       future.get();
     }
+  }
+
+  template <std::ranges::forward_range R,
+            typename T = std::ranges::range_value_t<R>>
+  inline void fold_left(const R &range, T initial, std::function<T(T)> functor,
+                        std::function<T(T, T)> accumulator) {
+    return std::ranges::fold_left(transform(range, functor), initial,
+                                  accumulator);
   }
 
 private:
