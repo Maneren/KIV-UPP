@@ -1,23 +1,19 @@
 #pragma once
 
 #include "data.hpp"
-#include <vector>
 
 class Preprocessor {
 public:
-  virtual Stations
-  preprocess_data(const Stations &) const = 0;
   virtual ~Preprocessor() = default;
+  virtual void preprocess_data(Stations &) const = 0;
 };
 
 class SerialPreprocessor : public Preprocessor {
 public:
-  Stations
-  preprocess_data(const Stations &) const override;
+  void preprocess_data(Stations &) const override;
 };
 
 class ParallelPreprocessor : public Preprocessor {
 public:
-  Stations
-  preprocess_data(const Stations &) const override;
+  void preprocess_data(Stations &) const override;
 };
