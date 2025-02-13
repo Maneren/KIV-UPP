@@ -35,7 +35,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read id field.");
     }
-    size_t id = std::stoi(field_buffer);
+    size_t _ = std::stoul(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read name field.");
@@ -81,7 +81,7 @@ void fill_measurements(Stations &stations,
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read id field.");
     }
-    std::size_t id = std::stoi(field_buffer);
+    std::size_t id = std::stoul(field_buffer);
 
     if (id - 1 > stations.size())
       throw std::runtime_error("Invalid station ID.");
@@ -89,22 +89,22 @@ void fill_measurements(Stations &stations,
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read ordinal field.");
     }
-    std::size_t ordinal = std::stoi(field_buffer);
+    std::size_t ordinal = std::stoul(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read year field.");
     }
-    Year year = std::stoi(field_buffer);
+    Year year = std::stoul(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read month field.");
     }
-    Month month = std::stoi(field_buffer);
+    Month month = std::stoul(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read day field.");
     }
-    Day day = std::stoi(field_buffer);
+    Day day = std::stoul(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read value field.");
