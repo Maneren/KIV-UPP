@@ -20,8 +20,7 @@ struct Measurement {
   Temperature value;
 };
 
-class Station {
-public:
+struct Station {
   std::string name;
   std::pair<double, double> location;
   std::vector<Measurement> measurements;
