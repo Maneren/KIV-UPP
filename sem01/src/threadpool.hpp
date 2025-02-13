@@ -23,14 +23,10 @@ class Threadpool {
 public:
   /**
    * @brief Construct a new Threadpool object.
+   * @param threadCount The number of worker threads to create. Defaults to the
+   * number of CPU threads.
    */
-  Threadpool() : Threadpool(std::thread::hardware_concurrency()) {};
-
-  /**
-   * @brief Construct a new Threadpool object with a custom worker thread count.
-   * @param threadCount The number of worker threads to create.
-   */
-  Threadpool(size_t thread_count);
+  Threadpool(size_t thread_count = std::thread::hardware_concurrency());
 
   /**
    * @brief Destroy the Threadpool object, joining all worker threads.
@@ -74,23 +70,22 @@ public:
   /**
    * @brief Spawn a task and return a future to retrieve the result.
    *
-   * @tparam F The type of the function to execute.
+   * @tparam Functor The type of the function to execute.
    * @tparam Args The types of the arguments to pass to the function.
-   * @tparam U The return type of the function.
+   * @tparam Result The return type of the function.
    *
    * @param f The function to execute.
    * @param args The arguments to pass to the function.
    *
-   * @return std::future<U> A future to retrieve the result of the task.
+   * @return std::future<Result> A future to retrieve the result of the task.
    */
-  template <class F, class... Args,
-            typename U = std::invoke_result_t<F, Args...>>
-  inline std::future<U> spawn_with_future(F &&f, Args &&...args) {
-    auto task = std::make_shared<std::packaged_task<U()>>(
-        std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-    auto res = task->get_future();
+  template <class Functor, class... Args,
+            typename Result = std::invoke_result_t<Functor, Args...>>
+  inline std::future<Result> spawn_with_future(Functor &&f, Args &&...args) {
+    auto task = std::make_shared<std::packaged_task<Result()>>(
+        std::bind(std::forward<Functor>(f), std::forward<Args>(args)...));
     spawn([task]() { (*task)(); });
-    return res;
+    return task->get_future();
   }
 
   /**
@@ -98,7 +93,7 @@ public:
    *
    * @param task The function to execute.
    */
-  inline void spawn(std::function<void()> task) {
+  inline void spawn(std::function<void()> &&task) {
     {
       std::unique_lock<std::mutex> lock(mMutex);
       mTasks.push(task);
@@ -109,9 +104,9 @@ public:
   /**
    * @brief Spawn a task.
    *
-   * @tparam U The return type of the function.
    * @tparam F The type of the function to execute.
    * @tparam Args The types of the arguments to pass to the function.
+   * @tparam U The return type of the function.
    *
    * @param f The function to execute.
    * @param args The arguments to pass to the function.
@@ -123,7 +118,7 @@ public:
 
   /**
    * @brief Gracefully stop the thread pool and join all worker threads
-   * (automatically called in destructor).
+   * (automatically called by the destructor).
    */
   void join();
 
@@ -131,21 +126,22 @@ public:
    * @brief Transform a range of data using a functor and return a vector of
    * futures.
    *
-   * @tparam R The type of the range.
-   * @tparam T The type of the elements in the range.
-   * @tparam F The type of the functor.
-   * @tparam U The return type of the functor.
+   * @tparam Range The type of the range.
+   * @tparam Item The type of the elements in the range.
+   * @tparam Functor The type of the functor.
+   * @tparam Result The return type of the functor.
    *
    * @param range The range of data to transform.
    * @param functor The functor to apply to each element of the range.
    *
-   * @return std::vector<std::future<U>> A vector of futures to retrieve the
-   * results of the transformations.
+   * @return std::vector<std::future<Result>> A vector of futures to retrieve
+   * the results of the transformations.
    */
-  template <std::ranges::forward_range R,
-            typename T = std::ranges::range_value_t<R>, typename F,
-            typename U = std::invoke_result_t<F, T &>>
-  inline std::vector<std::future<U>> transform(const R &range, F functor) {
+  template <std::ranges::forward_range Range,
+            typename Item = std::ranges::range_value_t<Range>, typename Functor,
+            typename Result = std::invoke_result_t<Functor, Item &>>
+  inline std::vector<std::future<Result>> transform(const Range &range,
+                                                    Functor &&functor) {
     return range | std::views::transform([this, &functor](auto item) {
              return spawn_with_future(functor, item);
            }) |
@@ -155,17 +151,19 @@ public:
   /**
    * @brief Apply a functor to each element of a range.
    *
-   * @tparam R The type of the range.
-   * @tparam T The type of the elements in the range.
+   * @tparam Range The type of the range.
+   * @tparam Item The type of the elements in the range.
+   * @tparam Functor The type of the functor.
+   * @tparam Result The return type of the functor (should be void).
    *
    * @param range The range of data to process.
    * @param functor The functor to apply to each element of the range.
    */
-  template <std::ranges::forward_range R,
-            typename T = std::ranges::range_value_t<R>, typename F,
-            typename U = std::invoke_result_t<F, T &>>
-  inline void for_each(const R &range, F functor) {
-    static_assert(std::is_same<U, void>::value);
+  template <std::ranges::forward_range Range,
+            typename Item = std::ranges::range_value_t<Range>, typename Functor,
+            typename Result = std::invoke_result_t<Functor, Item &>>
+  inline void for_each(const Range &range, Functor &&functor) {
+    static_assert(std::is_same_v<Result, void>);
 
     for (auto &future : transform(range, functor)) {
       future.get();
