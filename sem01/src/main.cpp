@@ -135,9 +135,9 @@ int main(int argc, char *argv[]) {
 
   auto elapsed = std::chrono::high_resolution_clock::now() - start;
   std::cout
-      << "Elapsed time: "
+      << "Loaded data for " << stations.size() << " stations in "
       << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
-      << "ms" << std::endl;
+      << " ms" << std::endl;
 
   std::unique_ptr<Preprocessor> preprocessor;
   if (config.mode() == ProcessingMode::Serial) {
@@ -146,19 +146,16 @@ int main(int argc, char *argv[]) {
     preprocessor = std::make_unique<ParallelPreprocessor>();
   }
 
-  std::cout << "Stations: " << stations.size() << std::endl;
-
   start = std::chrono::high_resolution_clock::now();
 
   preprocessor->preprocess_data(stations);
   stations.shrink_to_fit();
 
   elapsed = std::chrono::high_resolution_clock::now() - start;
-  std::cout << "Preprocessed stations: " << stations.size() << std::endl;
   std::cout
-      << "Elapsed time: "
+      << "Preprocessed " << stations.size() << " stations in "
       << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
-      << "μs" << std::endl;
+      << " μs" << std::endl;
 
   std::unique_ptr<OutlierDetector> detector;
   if (config.mode() == ProcessingMode::Serial) {
@@ -172,11 +169,10 @@ int main(int argc, char *argv[]) {
   auto [averages, outliers] = detector->find_averages_and_outliers(stations);
 
   elapsed = std::chrono::high_resolution_clock::now() - start;
-  std::cout << "Outliers: " << outliers.size() << std::endl;
   std::cout
-      << "Elapsed time: "
+      << "Detected " << outliers.size() << " outliers in "
       << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
-      << "μs" << std::endl;
+      << " μs" << std::endl;
 
   {
     std::ofstream outlier_file("output/vykyvy.csv");
@@ -200,9 +196,9 @@ int main(int argc, char *argv[]) {
 
   elapsed = std::chrono::high_resolution_clock::now() - start;
   std::cout
-      << "Elapsed time: "
+      << "Rendered output SVGs in "
       << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
-      << "μs" << std::endl;
+      << " μs" << std::endl;
 
   return 0;
 }
