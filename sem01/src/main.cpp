@@ -3,9 +3,13 @@
 #include "outliers.hpp"
 #include "preprocessor.hpp"
 #include "renderer.hpp"
+#include "utils.hpp"
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <ostream>
+#include <print>
+#include <ranges>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -116,6 +120,16 @@ void fill_measurements(Stations &stations,
   }
 }
 
+inline constexpr bool PERF_TEST = (
+#ifdef PERF_TEST_MACRO
+    true
+#else
+    false
+#endif
+);
+
+constexpr size_t TEST_RUNS = 100;
+
 int main(int argc, char *argv[]) {
   Config config;
   try {
@@ -125,7 +139,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::cout << std::format("{}", config);
+  std::println("{}", config);
 
   auto start = std::chrono::high_resolution_clock::now();
 
@@ -134,45 +148,71 @@ int main(int argc, char *argv[]) {
   fill_measurements(stations, config.measurements_file());
 
   auto elapsed = std::chrono::high_resolution_clock::now() - start;
-  std::cout
-      << "Loaded data for " << stations.size() << " stations in "
-      << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
-      << " ms" << std::endl;
 
-  std::unique_ptr<Preprocessor> preprocessor;
-  if (config.mode() == ProcessingMode::Serial) {
-    preprocessor = std::make_unique<SerialPreprocessor>();
-  } else {
-    preprocessor = std::make_unique<ParallelPreprocessor>();
+  auto measurements = std::ranges::fold_left(
+      stations | std::views::transform(
+                     [](auto &station) { return station.measurements.size(); }),
+      0, std::plus<>{});
+
+  std::println(
+      "Loaded data for {} stations and {} measurements in {} ms. "
+      "Processing...",
+      stations.size(), measurements,
+      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+
+  auto processing_start = std::chrono::high_resolution_clock::now();
+
+  auto preprocessor =
+      choose_by_mode<Preprocessor, SerialPreprocessor, ParallelPreprocessor>(
+          config.mode());
+
+  Stations stations_copy;
+  if constexpr (PERF_TEST) {
+    stations_copy = stations;
   }
-
-  start = std::chrono::high_resolution_clock::now();
 
   preprocessor->preprocess_data(stations);
   stations.shrink_to_fit();
 
-  elapsed = std::chrono::high_resolution_clock::now() - start;
-  std::cout
-      << "Preprocessed " << stations.size() << " stations in "
-      << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
-      << " μs" << std::endl;
+  if constexpr (PERF_TEST) {
+    size_t total = 0;
+    for (size_t i = 0; i < TEST_RUNS; i++) {
+      auto stations_test = stations_copy;
+      auto start = std::chrono::high_resolution_clock::now();
 
-  std::unique_ptr<OutlierDetector> detector;
-  if (config.mode() == ProcessingMode::Serial) {
-    detector = std::make_unique<SerialOutlierDetector>();
-  } else {
-    detector = std::make_unique<ParallelOutlierDetector>();
+      preprocessor->preprocess_data(stations_test);
+      stations_test.shrink_to_fit();
+
+      total += std::chrono::duration_cast<std::chrono::microseconds>(
+                   (std::chrono::high_resolution_clock::now() - start))
+                   .count();
+    }
+
+    std::println("Preprocessed {} stations in {} μs", stations.size(),
+                 total / TEST_RUNS);
   }
 
-  start = std::chrono::high_resolution_clock::now();
+  auto detector = choose_by_mode<OutlierDetector, SerialOutlierDetector,
+                                 ParallelOutlierDetector>(config.mode());
 
   auto [averages, outliers] = detector->find_averages_and_outliers(stations);
 
-  elapsed = std::chrono::high_resolution_clock::now() - start;
-  std::cout
-      << "Detected " << outliers.size() << " outliers in "
-      << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
-      << " μs" << std::endl;
+  if constexpr (PERF_TEST) {
+    size_t total = 0;
+    for (size_t i = 0; i < TEST_RUNS; i++) {
+      auto start = std::chrono::high_resolution_clock::now();
+
+      auto [averages, outliers] =
+          detector->find_averages_and_outliers(stations);
+
+      total += std::chrono::duration_cast<std::chrono::microseconds>(
+                   (std::chrono::high_resolution_clock::now() - start))
+                   .count();
+    }
+
+    std::println("Detected {} outliers in {} μs", outliers.size(),
+                 total / TEST_RUNS);
+  }
 
   {
     std::ofstream outlier_file("output/vykyvy.csv");
@@ -183,22 +223,32 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  std::unique_ptr<Renderer> renderer;
-  if (config.mode() == ProcessingMode::Serial) {
-    renderer = std::make_unique<SerialRenderer>();
-  } else {
-    renderer = std::make_unique<ParallelRenderer>();
-  }
-
-  start = std::chrono::high_resolution_clock::now();
+  auto renderer =
+      choose_by_mode<Renderer, SerialRenderer, ParallelRenderer>(config.mode());
 
   renderer->render_months(stations, averages);
 
-  elapsed = std::chrono::high_resolution_clock::now() - start;
-  std::cout
-      << "Rendered output SVGs in "
-      << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
-      << " μs" << std::endl;
+  if constexpr (PERF_TEST) {
+    size_t total = 0;
+    for (size_t i = 0; i < TEST_RUNS; i++) {
+      auto start = std::chrono::high_resolution_clock::now();
+
+      renderer->render_months(stations, averages);
+
+      total += std::chrono::duration_cast<std::chrono::microseconds>(
+                   (std::chrono::high_resolution_clock::now() - start))
+                   .count();
+    }
+
+    std::println("Rendered SVG files in {} μs", total / TEST_RUNS);
+  }
+
+  if constexpr (!PERF_TEST) {
+    elapsed = std::chrono::high_resolution_clock::now() - processing_start;
+    std::println(
+        "Processed data in {} ms",
+        std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+  }
 
   return 0;
 }
