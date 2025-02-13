@@ -7,19 +7,16 @@ default:
 
 configure:
     mkdir -p {{ builddir }}
-    cmake -S . -B {{ builddir }}
+    cmake -DCMAKE_BUILD_TYPE=Debug -S . -B {{ builddir }}
+
+configure_release:
+    mkdir -p {{ builddir }}
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -S . -B {{ builddir }}
 
 build:
-    CMAKE_BUILD_TYPE=Debug cmake --build {{ builddir }}
-
-build_release:
-    CMAKE_BUILD_TYPE=RelWithDebInfo cmake --build {{ builddir }}
+    cmake --build {{ builddir }}
 
 sample: build
-    time {{ builddir }}/meteo --serial meteodata/stanice.csv meteodata/mereni.csv
-    time {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
-
-release: build_release
     time {{ builddir }}/meteo --serial meteodata/stanice.csv meteodata/mereni.csv
     time {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
 
@@ -27,9 +24,9 @@ valgrind: build
     valgrind --leak-check=full {{ builddir }}/meteo --serial meteodata/stanice.csv meteodata/mereni.csv
     valgrind --leak-check=full {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
 
-perf: build_release
-    perf record --call-graph=dwarf -o perf.serial.data {{ builddir }}/meteo --serial meteodata/stanice.csv meteodata/mereni.csv
-    perf record --call-graph=dwarf -o perf.parallel.data {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
+perf: build
+    perf record -F 20000 --call-graph=dwarf -o perf.serial.data {{ builddir }}/meteo --serial meteodata/stanice.csv meteodata/mereni.csv
+    perf record -F 20000 --call-graph=dwarf -o perf.parallel.data {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
     perf script -i perf.serial.data > perf.serial.script
     perf script -i perf.parallel.data > perf.parallel.script
 
