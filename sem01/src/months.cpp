@@ -19,13 +19,13 @@ calculate_monthly_stats(const Station &station) {
   size_t days = 0;
   Temperature running_total{0};
 
-  for (auto &measurement : station.measurements) {
-    auto year = measurement.year;
-    auto month = measurement.month;
-    auto value = measurement.value;
+  for (const auto &measurement : station.measurements) {
+    const auto year = measurement.year;
+    const auto month = measurement.month;
+    const auto value = measurement.value;
 
     if (current_month != month) {
-      auto average = running_total / days;
+      const auto average = running_total / days;
 
       auto &current_min_max = monthly_minmaxes[month - 1];
       current_min_max.first = std::min(current_min_max.first, average);
@@ -75,13 +75,14 @@ StationMonthlyAverages calculate_monthly_averages(const Station &station,
 std::pair<std::vector<StationMonthlyAverages>, Outliers>
 SerialOutlierDetector::average_and_find_outliers(
     const Stations &stations) const {
-  std::vector<StationMonthlyAverages> stations_averages;
   Outliers outliers;
-
-  for (const auto &[id, station] : stations | std::views::enumerate) {
-    stations_averages.push_back(
-        calculate_monthly_averages(station, id, outliers));
-  }
+  const auto stations_averages =
+      stations | std::views::enumerate |
+      std::views::transform([&outliers](const auto &item) {
+        const auto [id, station] = item;
+        return calculate_monthly_averages(station, id, outliers);
+      }) |
+      std::ranges::to<std::vector>();
 
   return {stations_averages, outliers};
 }
@@ -89,25 +90,26 @@ SerialOutlierDetector::average_and_find_outliers(
 std::pair<std::vector<StationMonthlyAverages>, Outliers>
 ParallelOutlierDetector::average_and_find_outliers(
     const Stations &stations) const {
-  auto results = pool.transform(
-      stations | std::ranges::views::enumerate, [&](const auto &item) {
-        auto [id, station] = item;
-        auto [averages, min_maxes] = calculate_monthly_stats(station);
-        Outliers outliers;
+  auto futures =
+      pool.transform(stations | std::views::enumerate, [](const auto &item) {
+        const auto [id, station] = item;
 
-        auto monthly_averages =
+        Outliers outliers;
+        const auto monthly_averages =
             calculate_monthly_averages(station, id, outliers);
 
         return std::make_pair(monthly_averages, outliers);
       });
 
   std::vector<StationMonthlyAverages> stations_averages;
+  stations_averages.reserve(stations.size());
+
   Outliers outliers;
 
-  for (auto &result : results) {
-    const auto [averages, station_outliers] = result.get();
+  for (auto &future : futures) {
+    const auto &[averages, station_outliers] = future.get();
 
-    stations_averages.push_back(averages);
+    stations_averages.push_back(std::move(averages));
 
     outliers.insert(outliers.end(), station_outliers.begin(),
                     station_outliers.end());
