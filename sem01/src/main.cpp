@@ -15,27 +15,18 @@
 Stations read_stations(const std::filesystem::path &input_filepath) {
   Stations stations;
 
-  std::ifstream input_file(input_filepath);
-  if (!input_file.is_open()) {
-    throw std::runtime_error("Failed to open file.");
-  }
-
   std::ifstream file(input_filepath);
   if (!file.is_open()) {
     throw std::runtime_error("Failed to open file.");
   }
 
-  std::string field_buffer;
-  auto last_id = -1;
+  std::string line, field_buffer;
 
-  std::string line;
+  // Skip the header line
+  std::getline(file, line);
+
   while (std::getline(file, line)) {
     if (line.empty()) {
-      continue;
-    }
-
-    if (last_id == -1) {
-      last_id++;
       continue;
     }
 
@@ -44,12 +35,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read id field.");
     }
-    std::size_t id = std::stoi(field_buffer);
-
-    if (id - last_id > 1)
-      throw std::runtime_error("Skipped station index.");
-    else
-      last_id = id;
+    int id = std::stoi(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read name field.");
@@ -81,14 +67,12 @@ void fill_measurements(Stations &stations,
 
   std::string line;
   std::string field_buffer;
-  auto last_ord = -1;
+
+  // Skip the header line
+  std::getline(file, line);
+
   while (std::getline(file, line)) {
     if (line.empty()) {
-      continue;
-    }
-
-    if (last_ord == -1) {
-      last_ord++;
       continue;
     }
 
@@ -106,11 +90,6 @@ void fill_measurements(Stations &stations,
       throw std::runtime_error("Failed to read ordinal field.");
     }
     std::size_t ordinal = std::stoi(field_buffer);
-
-    if (ordinal - stations[id - 1].measurements.size() > 1)
-      throw std::runtime_error("Skipped measurement.");
-    else
-      last_ord = ordinal;
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read year field.");
@@ -152,35 +131,44 @@ int main(int argc, char *argv[]) {
 
   std::cout << std::format("{}", config);
 
+  auto start = std::chrono::high_resolution_clock::now();
+
   auto stations = read_stations(config.stations_file());
 
   fill_measurements(stations, config.measurements_file());
 
-  Preprocessor *preprocessor;
-  if (config.mode() == ProcessingMode::Serial) {
-    preprocessor = new SerialPreprocessor();
-  } else {
-    preprocessor = new ParallelPreprocessor();
-  }
-
-  std::cout << "Stations: " << stations.size() << std::endl;
-
-  auto start = std::chrono::high_resolution_clock::now();
-
-  stations = preprocessor->preprocess_data(stations);
-
   auto elapsed = std::chrono::high_resolution_clock::now() - start;
-  std::cout << "Preprocessed stations: " << stations.size() << std::endl;
   std::cout
       << "Elapsed time: "
       << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
       << "ms" << std::endl;
 
-  OutlierDetector *detector;
-  if (config.mode() == ProcessingMode::Serial) {
-    detector = new SerialOutlierDetector();
+  std::unique_ptr<Preprocessor> preprocessor;
+  if (config.mode()) {
+    preprocessor = std::make_unique<SerialPreprocessor>();
   } else {
-    detector = new ParallelOutlierDetector();
+    preprocessor = std::make_unique<ParallelPreprocessor>();
+  }
+
+  std::cout << "Stations: " << stations.size() << std::endl;
+
+  start = std::chrono::high_resolution_clock::now();
+
+  preprocessor->preprocess_data(stations);
+  stations.shrink_to_fit();
+
+  elapsed = std::chrono::high_resolution_clock::now() - start;
+  std::cout << "Preprocessed stations: " << stations.size() << std::endl;
+  std::cout
+      << "Elapsed time: "
+      << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
+      << "μs" << std::endl;
+
+  std::unique_ptr<OutlierDetector> detector;
+  if (config.mode() == ProcessingMode::Serial) {
+    detector = std::make_unique<SerialOutlierDetector>();
+  } else {
+    detector = std::make_unique<ParallelOutlierDetector>();
   }
 
   start = std::chrono::high_resolution_clock::now();
@@ -191,8 +179,8 @@ int main(int argc, char *argv[]) {
   std::cout << "Outliers: " << outliers.size() << std::endl;
   std::cout
       << "Elapsed time: "
-      << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
-      << "ms" << std::endl;
+      << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
+      << "μs" << std::endl;
 
   {
     std::ofstream outlier_file("output/vykyvy.csv");
@@ -203,11 +191,11 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  Renderer *renderer;
+  std::unique_ptr<Renderer> renderer;
   if (config.mode() == ProcessingMode::Serial) {
-    renderer = new SerialRenderer();
+    renderer = std::make_unique<SerialRenderer>();
   } else {
-    renderer = new ParallelRenderer();
+    renderer = std::make_unique<ParallelRenderer>();
   }
 
   start = std::chrono::high_resolution_clock::now();
@@ -217,8 +205,8 @@ int main(int argc, char *argv[]) {
   elapsed = std::chrono::high_resolution_clock::now() - start;
   std::cout
       << "Elapsed time: "
-      << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
-      << "ms" << std::endl;
+      << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
+      << "μs" << std::endl;
 
   for (auto [month, svg] : std::views::zip(MONTHS, svgs)) {
     std::ofstream svg_file(std::format("output/{}.svg", month));

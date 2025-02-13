@@ -24,7 +24,7 @@ public:
   Config() = default;
   Config(const int argc, const char *const argv[]);
 
-  const ProcessingMode mode() const { return mMode; }
+  ProcessingMode mode() const { return mMode; }
   const std::filesystem::path &stations_file() const { return mStationsFile; }
   const std::filesystem::path &measurements_file() const {
     return mMeasurementsFile;

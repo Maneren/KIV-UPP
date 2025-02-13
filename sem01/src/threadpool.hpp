@@ -162,21 +162,14 @@ public:
    * @param functor The functor to apply to each element of the range.
    */
   template <std::ranges::forward_range R,
-            typename T = std::ranges::range_value_t<R>>
-  inline void
-  for_each(const R &range,
-           std::function<void(const size_t index, T &value)> functor) {
+            typename T = std::ranges::range_value_t<R>, typename F,
+            typename U = std::invoke_result_t<F, T &>>
+  inline void for_each(const R &range, F functor) {
+    static_assert(std::is_same<U, void>::value);
+
     for (auto &future : transform(range, functor)) {
       future.get();
     }
-  }
-
-  template <std::ranges::forward_range R,
-            typename T = std::ranges::range_value_t<R>>
-  inline void fold_left(const R &range, T initial, std::function<T(T)> functor,
-                        std::function<T(T, T)> accumulator) {
-    return std::ranges::fold_left(transform(range, functor), initial,
-                                  accumulator);
   }
 
 private:

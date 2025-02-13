@@ -7,6 +7,7 @@ class Preprocessor {
 public:
   virtual Stations
   preprocess_data(const Stations &) const = 0;
+  virtual ~Preprocessor() = default;
 };
 
 class SerialPreprocessor : public Preprocessor {

@@ -79,8 +79,4 @@ public:
   std::array<std::string, 12>
   render_months(const Stations &stations,
                 const std::vector<StationMonthlyAverages> &averages) override;
-
-private:
-  std::mutex mMutex;
-  std::vector<std::string> mSvgBuffer;
 };

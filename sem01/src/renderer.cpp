@@ -59,25 +59,6 @@ std::string ParallelRenderer::render_month(
     const Stations &stations,
     const std::vector<StationMonthlyAverages> &averages,
     const size_t month) const {
-  // auto svg_lines = pool.transform(
-  //     std::views::zip(stations, averages), [this, month](const auto &item) {
-  //       const auto [station, averages] = item;
-  //       const auto month_averages = averages[month] | std::views::values;
-  //
-  //       const auto average = std::ranges::fold_left(
-  //                                month_averages, Temperature{0}, std::plus{})
-  //                                /
-  //                            month_averages.size();
-  //
-  //       return render_station(station, average);
-  //     });
-  //
-  // std::string svg = std::string{HEADER};
-  //
-  // for (auto &future : svg_lines) {
-  //   svg += future.get();
-  // }
-
   std::string svg = std::string{HEADER};
 
   for (const auto [station, averages] : std::views::zip(stations, averages)) {
@@ -98,28 +79,17 @@ std::string ParallelRenderer::render_month(
 std::array<std::string, 12> ParallelRenderer::render_months(
     const Stations &stations,
     const std::vector<StationMonthlyAverages> &averages) {
-  auto minmaxes = pool.transform(averages, [](const auto &station_averages) {
-    return std::ranges::minmax(station_averages | std::views::join |
-                               std::views::values);
-  });
-
-  for (auto &future : minmaxes) {
-    auto [min, max] = future.get();
-    mMinmax.min = std::min(mMinmax.min, min);
-    mMinmax.max = std::max(mMinmax.max, max);
-  }
+  mMinmax = std::ranges::minmax(averages | std::views::join |
+                                std::views::transform([](auto &item) {
+                                  return item | std::views::values;
+                                }) |
+                                std::views::join);
 
   std::array<std::string, 12> svgs;
-  std::array<std::future<void>, 12> futures;
 
-  for (auto i = 0; i < 12; i++) {
-    futures[i] = pool.spawn_with_future(
-        [&, this, i] { svgs[i] = render_month(stations, averages, i); });
-  }
-
-  for (auto &future : futures) {
-    future.get();
-  }
+  pool.for_each(std::views::iota(0, 12), [&, this](const int &i) {
+    svgs[i] = render_month(stations, averages, i);
+  });
 
   return svgs;
 }
