@@ -15,7 +15,6 @@ add_executable(
   meteo
   src/main.cpp
   src/config.cpp
-  src/map.c
   src/months.cpp
   src/preprocessor.cpp
   src/renderer.cpp

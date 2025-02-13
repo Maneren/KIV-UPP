@@ -35,7 +35,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read id field.");
     }
-    int id = std::stoi(field_buffer);
+    size_t id = std::stoi(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read name field.");
@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
       << "ms" << std::endl;
 
   std::unique_ptr<Preprocessor> preprocessor;
-  if (config.mode()) {
+  if (config.mode() == ProcessingMode::Serial) {
     preprocessor = std::make_unique<SerialPreprocessor>();
   } else {
     preprocessor = std::make_unique<ParallelPreprocessor>();
