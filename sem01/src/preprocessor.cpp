@@ -30,10 +30,24 @@ void SerialPreprocessor::preprocess_data(Stations &stations) const {
 }
 
 void ParallelPreprocessor::preprocess_data(Stations &stations) const {
-  for (auto [i, future] : pool.transform(stations, valid_station) |
-                              std::views::enumerate | std::views::reverse) {
+  // HACK: This is a roundabout way of forcing the use of references rather than
+  // copying all of the items in the vector. Below is a commented reference
+  // version with the unwanted copying.
+  auto futures = pool.transform(
+      std::views::iota(0uz, stations.size()),
+      [&stations](const auto &i) { return valid_station(stations[i]); });
+
+  for (auto [i, future] :
+       futures | std::views::enumerate | std::views::reverse) {
     if (!future.get()) {
       swap_remove(stations, i);
     }
   }
+
+  // for (auto [i, future] : pool.transform(stations, valid_station) |
+  //                             std::views::enumerate | std::views::reverse) {
+  //   if (!future.get()) {
+  //     swap_remove(stations, i);
+  //   }
+  // }
 }
