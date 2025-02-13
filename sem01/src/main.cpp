@@ -116,10 +116,6 @@ void fill_measurements(Stations &stations,
   }
 }
 
-constexpr std::array<std::string_view, 12> MONTHS = {
-    "leden",    "unor",  "brezen", "duben", "kveten",   "cerven",
-    "cervenec", "srpen", "zari",   "rijen", "listopad", "prosinec"};
-
 int main(int argc, char *argv[]) {
   Config config;
   try {
@@ -200,18 +196,13 @@ int main(int argc, char *argv[]) {
 
   start = std::chrono::high_resolution_clock::now();
 
-  const auto svgs = renderer->render_months(stations, averages);
+  renderer->render_months(stations, averages);
 
   elapsed = std::chrono::high_resolution_clock::now() - start;
   std::cout
       << "Elapsed time: "
       << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
       << "μs" << std::endl;
-
-  for (auto [month, svg] : std::views::zip(MONTHS, svgs)) {
-    std::ofstream svg_file(std::format("output/{}.svg", month));
-    svg_file << svg;
-  }
 
   return 0;
 }

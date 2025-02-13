@@ -1,6 +1,9 @@
 #include "renderer.hpp"
 #include "threadpool.hpp"
-#include <numeric>
+#include "utils.hpp"
+#include <algorithm>
+#include <format>
+#include <fstream>
 
 Renderer::Renderer() {
   std::ifstream file("czmap.svg");
@@ -16,11 +19,33 @@ Renderer::Renderer() {
 
 std::string Renderer::HEADER;
 
-std::string SerialRenderer::render_month(
+std::string Renderer::render_station(const Station &station,
+                                     const Temperature temperature) const {
+  const auto [upper_left_lat, upper_left_lon] = UPPER_LEFT_CORNER;
+  const auto [lower_right_lat, lower_right_lon] = LOWER_RIGHT_CORNER;
+
+  const auto y = map_range(upper_left_lat, lower_right_lat, 0, MAP_HEIGHT,
+                           station.location.first);
+  const auto x = map_range(upper_left_lon, lower_right_lon, 0, MAP_WIDTH,
+                           station.location.second);
+
+  const auto value = map_range(mMinmax.min, mMinmax.max, -1, 1, temperature);
+
+  constexpr Color BLUE{0, 0, 255, 255};
+  constexpr Color YELLOW{255, 255, 0, 255};
+  constexpr Color RED{255, 0, 0, 255};
+
+  const auto color = lerpColor3(BLUE, YELLOW, RED, value);
+
+  return std::format(TEMPLATE, y, x, color.r, color.g, color.b);
+};
+
+void Renderer::render_month_to_file(
     const Stations &stations,
-    const std::vector<StationMonthlyAverages> &averages,
-    const size_t month) const {
-  std::string svg = std::string{HEADER};
+    const std::vector<StationMonthlyAverages> &averages, const size_t month,
+    const std::string &file_name) const {
+  std::ofstream svg_file(file_name);
+  svg_file << HEADER;
 
   for (const auto [station, averages] : std::views::zip(stations, averages)) {
     const auto month_averages = averages[month] | std::views::values;
@@ -29,15 +54,17 @@ std::string SerialRenderer::render_month(
         std::ranges::fold_left(month_averages, Temperature{0}, std::plus{}) /
         month_averages.size();
 
-    svg += render_station(station, average);
+    svg_file << render_station(station, average);
   }
 
-  svg += FOOTER;
-
-  return svg;
+  svg_file << FOOTER;
 }
 
-std::array<std::string, 12> SerialRenderer::render_months(
+constexpr std::array<std::string_view, 12> MONTHS = {
+    "leden",    "unor",  "brezen", "duben", "kveten",   "cerven",
+    "cervenec", "srpen", "zari",   "rijen", "listopad", "prosinec"};
+
+void SerialRenderer::render_months(
     const Stations &stations,
     const std::vector<StationMonthlyAverages> &averages) {
   mMinmax = std::ranges::minmax(averages | std::views::join |
@@ -46,37 +73,13 @@ std::array<std::string, 12> SerialRenderer::render_months(
                                 }) |
                                 std::views::join);
 
-  std::array<std::string, 12> svgs;
-
-  for (auto i = 0; i < 12; i++) {
-    svgs[i] = render_month(stations, averages, i);
+  for (const auto [i, month] : MONTHS | std::views::enumerate) {
+    render_month_to_file(stations, averages, i,
+                         std::format("output/{}.svg", month));
   }
-
-  return svgs;
 }
 
-std::string ParallelRenderer::render_month(
-    const Stations &stations,
-    const std::vector<StationMonthlyAverages> &averages,
-    const size_t month) const {
-  std::string svg = std::string{HEADER};
-
-  for (const auto [station, averages] : std::views::zip(stations, averages)) {
-    const auto month_averages = averages[month] | std::views::values;
-
-    const auto average =
-        std::ranges::fold_left(month_averages, Temperature{0}, std::plus{}) /
-        month_averages.size();
-
-    svg += render_station(station, average);
-  }
-
-  svg += FOOTER;
-
-  return svg;
-}
-
-std::array<std::string, 12> ParallelRenderer::render_months(
+void ParallelRenderer::render_months(
     const Stations &stations,
     const std::vector<StationMonthlyAverages> &averages) {
   mMinmax = std::ranges::minmax(averages | std::views::join |
@@ -85,11 +88,9 @@ std::array<std::string, 12> ParallelRenderer::render_months(
                                 }) |
                                 std::views::join);
 
-  std::array<std::string, 12> svgs;
-
-  pool.for_each(std::views::iota(0, 12), [&, this](const int &i) {
-    svgs[i] = render_month(stations, averages, i);
+  pool.for_each(MONTHS | std::views::enumerate, [&, this](const auto &item) {
+    const auto [i, month] = item;
+    render_month_to_file(stations, averages, i,
+                         std::format("output/{}.svg", month));
   });
-
-  return svgs;
 }
