@@ -1,4 +1,4 @@
-#include "months.hpp"
+#include "outliers.hpp"
 #include "threadpool.hpp"
 #include <limits>
 #include <ranges>
@@ -73,7 +73,7 @@ StationMonthlyAverages calculate_monthly_averages(const Station &station,
 }
 
 std::pair<std::vector<StationMonthlyAverages>, Outliers>
-SerialOutlierDetector::average_and_find_outliers(
+SerialOutlierDetector::find_averages_and_outliers(
     const Stations &stations) const {
   Outliers outliers;
   const auto stations_averages =
@@ -88,7 +88,7 @@ SerialOutlierDetector::average_and_find_outliers(
 }
 
 std::pair<std::vector<StationMonthlyAverages>, Outliers>
-ParallelOutlierDetector::average_and_find_outliers(
+ParallelOutlierDetector::find_averages_and_outliers(
     const Stations &stations) const {
   auto futures =
       pool.transform(stations | std::views::enumerate, [](const auto &item) {

@@ -9,17 +9,17 @@ class OutlierDetector {
 public:
   virtual ~OutlierDetector() = default;
   virtual std::pair<std::vector<StationMonthlyAverages>, Outliers>
-  average_and_find_outliers(const Stations &stations) const = 0;
+  find_averages_and_outliers(const Stations &stations) const = 0;
 };
 
 class SerialOutlierDetector : public OutlierDetector {
 public:
   std::pair<std::vector<StationMonthlyAverages>, Outliers>
-  average_and_find_outliers(const Stations &stations) const override;
+  find_averages_and_outliers(const Stations &stations) const override;
 };
 
 class ParallelOutlierDetector : public OutlierDetector {
 public:
   std::pair<std::vector<StationMonthlyAverages>, Outliers>
-  average_and_find_outliers(const Stations &stations) const override;
+  find_averages_and_outliers(const Stations &stations) const override;
 };

@@ -1,6 +1,6 @@
 #include "config.hpp"
 #include "data.hpp"
-#include "months.hpp"
+#include "outliers.hpp"
 #include "preprocessor.hpp"
 #include "renderer.hpp"
 #include <format>
@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
 
   start = std::chrono::high_resolution_clock::now();
 
-  auto [averages, outliers] = detector->average_and_find_outliers(stations);
+  auto [averages, outliers] = detector->find_averages_and_outliers(stations);
 
   elapsed = std::chrono::high_resolution_clock::now() - start;
   std::cout << "Outliers: " << outliers.size() << std::endl;
