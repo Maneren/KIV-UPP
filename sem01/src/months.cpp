@@ -9,7 +9,7 @@ using StationMonthlyMinmaxes =
 
 std::pair<StationMonthlyAverages, StationMonthlyMinmaxes>
 calculate_monthly_stats(const Station &station) {
-  std::array<MonthlyAverages, 12> monthly_averages;
+  StationMonthlyAverages monthly_averages;
 
   StationMonthlyMinmaxes monthly_minmaxes;
   monthly_minmaxes.fill({std::numeric_limits<float>::infinity(),
@@ -24,7 +24,7 @@ calculate_monthly_stats(const Station &station) {
     const auto month = measurement.month;
     const auto value = measurement.value;
 
-    if (current_month != month) {
+    if (month != current_month) {
       const auto average = running_total / days;
 
       auto &current_min_max = monthly_minmaxes[month - 1];

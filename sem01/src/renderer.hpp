@@ -30,7 +30,7 @@ protected:
   static std::string HEADER;
 
   static constexpr std::string_view TEMPLATE =
-      "<circle cy=\"{}\" cx=\"{}\" r=\"12\" fill=\"rgb({},{},{})\" />\n";
+      "<circle cy=\"{}\" cx=\"{}\" r=\"10\" fill=\"rgb({},{},{})\" />\n";
   static constexpr std::string_view FOOTER = "</svg>";
 
   static constexpr std::pair<double, double> UPPER_LEFT_CORNER{
