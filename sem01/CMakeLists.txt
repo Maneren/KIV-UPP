@@ -24,5 +24,4 @@ add_executable(
   src/preprocessor.cpp
   src/renderer.cpp
   src/threadpool.cpp
-  src/utils.cpp
 )
