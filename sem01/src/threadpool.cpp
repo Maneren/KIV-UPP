@@ -1,8 +1,6 @@
 #include "threadpool.hpp"
 
 Threadpool::Threadpool(size_t thread_count) {
-  mTasks = std::queue<std::function<void()>>{};
-
   mWorkers.reserve(thread_count);
 
   for (std::size_t i = 0; i < thread_count; ++i) {
@@ -32,7 +30,7 @@ void Threadpool::join() {
     mRunning = false;
   }
   mCondition.notify_all();
-  mWorkers.clear();
+  mWorkers.clear(); // joins the threads
 }
 
 Threadpool pool{};

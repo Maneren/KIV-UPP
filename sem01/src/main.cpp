@@ -17,13 +17,12 @@
 #include <vector>
 
 Stations read_stations(const std::filesystem::path &input_filepath) {
-  Stations stations;
-
   std::ifstream file(input_filepath);
   if (!file.is_open()) {
     throw std::runtime_error("Failed to open file.");
   }
 
+  Stations stations;
   std::string line, field_buffer;
 
   // Skip the header line
@@ -69,8 +68,7 @@ void fill_measurements(Stations &stations,
     throw std::runtime_error("Failed to open file.");
   }
 
-  std::string line;
-  std::string field_buffer;
+  std::string line, field_buffer;
 
   // Skip the header line
   std::getline(file, line);
@@ -87,7 +85,7 @@ void fill_measurements(Stations &stations,
     }
     std::size_t id = std::stoul(field_buffer);
 
-    if (id - 1 > stations.size())
+    if (id - 1 >= stations.size())
       throw std::runtime_error("Invalid station ID.");
 
     if (!std::getline(line_stream, field_buffer, ';')) {
