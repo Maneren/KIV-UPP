@@ -139,10 +139,10 @@ public:
    * @return std::vector<std::future<Result>> A vector of futures to retrieve
    * the results of the transformations.
    */
-  template <std::ranges::forward_range Range,
+  template <std::ranges::input_range Range,
             typename Item = std::ranges::range_value_t<Range>, typename Functor,
             typename Result = std::invoke_result_t<Functor, Item &>>
-  inline std::vector<std::future<Result>> transform(const Range &range,
+  inline std::vector<std::future<Result>> transform(Range &&range,
                                                     Functor &&functor) {
     auto f = [this, functor = std::forward<Functor>(functor)](
                  const auto &item) { return spawn_with_future(functor, item); };
@@ -160,10 +160,10 @@ public:
    * @param range The range of data to process.
    * @param functor The functor to apply to each element of the range.
    */
-  template <std::ranges::forward_range Range,
+  template <std::ranges::input_range Range,
             typename Item = std::ranges::range_value_t<Range>, typename Functor,
             typename Result = std::invoke_result_t<Functor, Item &>>
-  inline void for_each(const Range &range, Functor &&functor) {
+  inline void for_each(Range &&range, Functor &&functor) {
     static_assert(std::is_same_v<Result, void>);
 
     for (auto &future : transform(range, std::forward<Functor>(functor))) {
