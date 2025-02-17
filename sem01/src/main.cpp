@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "data.hpp"
+#include "file_line.hpp"
 #include "outliers.hpp"
 #include "preprocessor.hpp"
 #include "renderer.hpp"
@@ -28,12 +29,14 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
   // Skip the header line
   std::getline(file, line);
 
-  while (std::getline(file, line)) {
-    if (line.empty()) {
+  std::ranges::istream_view<FileLine> file_lines(file);
+
+  for (const auto &file_line : file_lines) {
+    if (file_line.line.empty()) {
       continue;
     }
 
-    auto line_stream = std::istringstream{line};
+    auto line_stream = std::istringstream{file_line.line};
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read id field.");
@@ -73,12 +76,14 @@ void fill_measurements(Stations &stations,
   // Skip the header line
   std::getline(file, line);
 
-  while (std::getline(file, line)) {
-    if (line.empty()) {
+  std::ranges::istream_view<FileLine> file_lines(file);
+
+  for (const auto &file_line : file_lines) {
+    if (file_line.line.empty()) {
       continue;
     }
 
-    auto line_stream = std::istringstream{line};
+    auto line_stream = std::istringstream{file_line.line};
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read id field.");
