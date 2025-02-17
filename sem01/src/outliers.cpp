@@ -46,7 +46,6 @@ calculate_monthly_stats(const Station &station) {
 }
 
 StationMonthlyAverages calculate_monthly_averages(const Station &station,
-                                                  const size_t station_id,
                                                   Outliers &outliers) {
   auto [averages, min_maxes] = calculate_monthly_stats(station);
 
@@ -64,7 +63,7 @@ StationMonthlyAverages calculate_monthly_averages(const Station &station,
       const auto diff = std::abs(next.second - prev.second);
 
       if (diff > allowed_difference) {
-        outliers.emplace_back(station_id, i + 1, next.first, diff);
+        outliers.emplace_back(station.id, i + 1, next.first, diff);
       }
     }
   }
@@ -77,10 +76,8 @@ SerialOutlierDetector::find_averages_and_outliers(
     const Stations &stations) const {
   Outliers outliers;
   const auto stations_averages =
-      stations | std::views::enumerate |
-      std::views::transform([&outliers](const auto &item) {
-        const auto [id, station] = item;
-        return calculate_monthly_averages(station, id, outliers);
+      stations | std::views::transform([&outliers](const auto &station) {
+        return calculate_monthly_averages(station, outliers);
       }) |
       std::ranges::to<std::vector>();
 
@@ -90,16 +87,11 @@ SerialOutlierDetector::find_averages_and_outliers(
 std::pair<std::vector<StationMonthlyAverages>, Outliers>
 ParallelOutlierDetector::find_averages_and_outliers(
     const Stations &stations) const {
-  auto futures =
-      pool.transform(stations | std::views::enumerate, [](const auto &item) {
-        const auto [id, station] = item;
-
-        Outliers outliers;
-        const auto monthly_averages =
-            calculate_monthly_averages(station, id, outliers);
-
-        return std::make_pair(monthly_averages, outliers);
-      });
+  auto futures = pool.transform(stations, [](const auto &station) {
+    Outliers outliers;
+    const auto monthly_averages = calculate_monthly_averages(station, outliers);
+    return std::make_pair(monthly_averages, outliers);
+  });
 
   std::vector<StationMonthlyAverages> stations_averages;
   stations_averages.reserve(stations.size());

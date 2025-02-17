@@ -21,6 +21,7 @@ struct Measurement {
 };
 
 struct Station {
+  size_t id;
   std::string name;
   std::pair<double, double> location;
   std::vector<Measurement> measurements;

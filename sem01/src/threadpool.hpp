@@ -79,11 +79,13 @@ public:
    *
    * @return std::future<Result> A future to retrieve the result of the task.
    */
-  template <class Functor, class... Args,
+  template <typename Functor, typename... Args,
             typename Result = std::invoke_result_t<Functor, Args...>>
   inline std::future<Result> spawn_with_future(Functor &&f, Args &&...args) {
     auto task = std::make_shared<std::packaged_task<Result()>>(
-        std::bind(std::forward<Functor>(f), std::forward<Args>(args)...));
+        [f = std::forward<Functor>(f), &args...] {
+          return f(std::forward<Args>(args)...);
+        });
     spawn([task]() { (*task)(); });
     return task->get_future();
   }
@@ -142,9 +144,8 @@ public:
             typename Result = std::invoke_result_t<Functor, Item &>>
   inline std::vector<std::future<Result>> transform(const Range &range,
                                                     Functor &&functor) {
-    auto f = [this, functor = std::forward<Functor>(functor)](auto item) {
-      return spawn_with_future(functor, item);
-    };
+    auto f = [this, functor = std::forward<Functor>(functor)](
+                 const auto &item) { return spawn_with_future(functor, item); };
     return range | std::views::transform(f) | std::ranges::to<std::vector>();
   }
 

@@ -38,7 +38,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read id field.");
     }
-    size_t _ = std::stoul(field_buffer);
+    size_t id = std::stoul(field_buffer);
 
     if (!std::getline(line_stream, field_buffer, ';')) {
       throw std::runtime_error("Failed to read name field.");
@@ -55,7 +55,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     }
     float latitude = std::stof(field_buffer);
 
-    stations.emplace_back(name, std::make_pair(latitude, longitude));
+    stations.emplace_back(id, name, std::make_pair(latitude, longitude));
   }
 
   return stations;
