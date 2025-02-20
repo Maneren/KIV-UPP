@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <format>
 #include <fstream>
+#include <vector>
 
 Renderer::Renderer() {
   std::ifstream file("czmap.svg");
@@ -64,14 +65,19 @@ constexpr std::array<std::string_view, 12> MONTHS = {
     "leden",    "unor",  "brezen", "duben", "kveten",   "cerven",
     "cervenec", "srpen", "zari",   "rijen", "listopad", "prosinec"};
 
+std::ranges::min_max_result<Temperature>
+minmax_station_averages(const std::vector<StationMonthlyAverages> &averages) {
+  return std::ranges::minmax(averages | std::views::join |
+                             std::views::transform([](auto &item) {
+                               return item | std::views::values;
+                             }) |
+                             std::views::join);
+}
+
 void SerialRenderer::render_months(
     const Stations &stations,
     const std::vector<StationMonthlyAverages> &averages) {
-  mMinmax = std::ranges::minmax(averages | std::views::join |
-                                std::views::transform([](auto &item) {
-                                  return item | std::views::values;
-                                }) |
-                                std::views::join);
+  mMinmax = minmax_station_averages(averages);
 
   for (const auto [i, month] : MONTHS | std::views::enumerate) {
     render_month_to_file(stations, averages, i,
@@ -82,11 +88,7 @@ void SerialRenderer::render_months(
 void ParallelRenderer::render_months(
     const Stations &stations,
     const std::vector<StationMonthlyAverages> &averages) {
-  mMinmax = std::ranges::minmax(averages | std::views::join |
-                                std::views::transform([](auto &item) {
-                                  return item | std::views::values;
-                                }) |
-                                std::views::join);
+  mMinmax = minmax_station_averages(averages);
 
   pool.for_each(MONTHS | std::views::enumerate, [&, this](const auto &item) {
     const auto [i, month] = item;
