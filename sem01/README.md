@@ -18,7 +18,7 @@ With the [just](https://github.com/casey/just) command runner.
 
 ### Build options
 
-`PERF_TEST_MACRO` - if defined (in CMakeLists.txt), build the binary in
+`PERF_TEST_MACRO` – if defined (in CMakeLists.txt), build the binary in
 performance testing mode (see below)
 
 ## Running
@@ -32,12 +32,12 @@ build/meteo --parallel|--serial path/to/stanice.csv path/to/mereni.csv
 ### Analysis
 
 Generally I first tried to write the serial version in reasonably optimized
-manner to have good baseline for comparison. Also I structured the code in
+manner to have good baseline for comparison. Also, I structured the code in
 a way, that leans heavily into ranges and higher-order-functions (HOF) (map,
-reduce, ...) that besides being clean and fast by themselves also allow for
+reduce, …) that besides being clean and fast by themselves also allow for
 a straightforward parallelization later.
 
-Furthermore I split the program into four parts:
+Furthermore, I split the program into four parts:
 
 - data loading
 - preprocessing
@@ -121,7 +121,7 @@ quite costly. Due to that, I left it serial.
 #### Preprocessing
 
 Preprocessing basically needs to run a check for every station and then remove
-the stations that don't pass the check. This allows for all of the stations to
+the stations that don't pass the check. This allows for all the stations to
 be checked in parallel but the (relatively fast) removal is better to be done
 later serially to prevent excessive locking.
 
@@ -196,7 +196,7 @@ multiple times and print the average time.
 ### Results
 
 For total runtime, I decided to omitt the data loading part since it takes
-between 1200 and 1500 milliseconds, while all of the "interesting" processing
+between 1200 and 1500 milliseconds, while all the “interesting” processing
 takes in total less than 20 milliseconds.
 
 Test devices were:
@@ -214,7 +214,7 @@ Test devices were:
 |               | desktop |          1412 |             422 |    3.35 |
 
 Interestingly, while the desktop was faster overall the performace difference
-varies wildly between the parts of the program. Also the speedups from
+varies wildly between the parts of the program. Also, the speedups from
 parallelization are overall slightly more noticeable on the laptop with fewer
 cores, making me think it has something to do with scheduling overhead or
 different cache structure.
