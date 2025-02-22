@@ -196,13 +196,22 @@ multiple times and print the average time.
 ### Results
 
 For total runtime, I decided to omitt the data loading part since it takes
-between 1200 and 1500 milliseconds, while all the “interesting” processing
-takes in total less than 20 milliseconds.
+between 1200 and 1300 milliseconds, while all of the "interesting" processing
+takes in total less than 30 milliseconds (that is less than 3% of the runtime).
 
 Test devices were:
 
 - laptop: Intel i7-1165G7 (4 cores/8 threads)
 - desktop: AMD Ryzen 7 5800X (8 cores/16 threads)
+
+Overall results:
+
+| device  | serial $[ms]$ | parallel $[ms]$ | speedup |
+| ------- | ------------: | --------------: | ------: |
+| laptop  |            27 |              13 |    2.08 |
+| desktop |            11 |               7 |    1.57 |
+
+Split by parts:
 
 | part          | device  | serial $[μs]$ | parallel $[μs]$ | speedup |
 | ------------- | ------- | ------------: | --------------: | ------: |
@@ -214,10 +223,45 @@ Test devices were:
 |               | desktop |          1412 |             422 |    3.35 |
 
 Interestingly, while the desktop was faster overall the performace difference
-varies wildly between the parts of the program. Also, the speedups from
-parallelization are overall slightly more noticeable on the laptop with fewer
-cores, making me think it has something to do with scheduling overhead or
-different cache structure.
+varies wildly between the parts of the program. Also the speedups from
+parallelization are overall more noticeable on the laptop with fewer cores,
+making me think it has something to do with scheduling overhead or different
+cache structure.
+
+#### Metrics
+
+##### Amdahl's law
+
+According to the Amdahl's law, the maximum speedup can be approximated
+as
+
+$$
+\text{speedup} = \frac{1}{(1 - \text{paralelizable}) \cdot
+    \frac{\text{paralelizable}}{\text{cores}}}
+$$
+
+Aproximating from `perf` measurements
+
+- preprocessing is 99% parallelizable
+- outlier detection is 98% parallelizable
+- rendering is 60% parallelizable
+
+That means the whole processing is (in theory) 82.8% paralelizable
+
+So for the laptop I get
+
+$$
+\text{speedup} = \frac{1}{(1 - 0.828) \cdot \frac{0.828}{4}} = 2.64
+$$
+
+which is larger that the measured speedup of 2.08, but not that far off.
+However for the desktop I get
+
+$$
+\text{speedup} = \frac{1}{(1 - 0.828) \cdot \frac{0.828}{16}} = 3.63
+$$
+
+which is way off from the measured speedup of 1.57.
 
 [^standard]:
     Custom made, because the standard library parallel algoritms have poor
