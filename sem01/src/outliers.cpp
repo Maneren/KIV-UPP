@@ -1,5 +1,6 @@
 #include "outliers.hpp"
 #include "threadpool.hpp"
+#include <algorithm>
 #include <limits>
 #include <ranges>
 #include <utility>

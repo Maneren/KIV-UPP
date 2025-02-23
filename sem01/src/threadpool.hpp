@@ -1,11 +1,11 @@
 #pragma once
 
-#include <algorithm>
 #include <functional>
 #include <future>
 #include <queue>
 #include <ranges>
 #include <thread>
+#include <utility>
 #include <vector>
 
 /**
@@ -113,9 +113,12 @@ public:
    * @param f The function to execute.
    * @param args The arguments to pass to the function.
    */
-  template <typename U, typename F, typename... Args>
+  template <typename F, typename... Args>
   inline void spawn(F &&f, Args &&...args) {
-    spawn(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+    static_assert(std::is_same_v<std::invoke_result_t<F, Args...>, void>,
+                  "The function must not return any value.");
+    spawn(static_cast<std::function<void()>>(
+        std::bind(std::forward<F>(f), std::forward<Args>(args)...)));
   }
 
   /**
@@ -142,10 +145,37 @@ public:
   template <std::ranges::input_range Range,
             typename Item = std::ranges::range_value_t<Range>, typename Functor,
             typename Result = std::invoke_result_t<Functor, Item &>>
+  inline std::vector<std::future<Result>> transform(Range &range,
+                                                    Functor &&functor) {
+    auto f = [this, &functor](auto &item) {
+      return spawn_with_future(std::forward<Functor>(functor), item);
+    };
+    return range | std::views::transform(f) | std::ranges::to<std::vector>();
+  }
+
+  /**
+   * @brief Transform a range of data using a functor and return a vector of
+   * futures.
+   *
+   * @tparam Range The type of the range.
+   * @tparam Item The type of the elements in the range.
+   * @tparam Functor The type of the functor.
+   * @tparam Result The return type of the functor.
+   *
+   * @param range The range of data to transform.
+   * @param functor The functor to apply to each element of the range.
+   *
+   * @return std::vector<std::future<Result>> A vector of futures to retrieve
+   * the results of the transformations.
+   */
+  template <std::ranges::input_range Range,
+            typename Item = std::ranges::range_value_t<Range>, typename Functor,
+            typename Result = std::invoke_result_t<Functor, Item>>
   inline std::vector<std::future<Result>> transform(Range &&range,
                                                     Functor &&functor) {
-    auto f = [this, functor = std::forward<Functor>(functor)](
-                 const auto &item) { return spawn_with_future(functor, item); };
+    auto f = [this, &functor](auto &&item) {
+      return spawn_with_future(std::bind(std::forward<Functor>(functor), item));
+    };
     return range | std::views::transform(f) | std::ranges::to<std::vector>();
   }
 
@@ -167,7 +197,8 @@ public:
     static_assert(std::is_same_v<Result, void>,
                   "for_each functor should return void");
 
-    for (auto &future : transform(range, std::forward<Functor>(functor))) {
+    for (auto &future : transform(std::forward<Range>(range),
+                                  std::forward<Functor>(functor))) {
       future.wait();
     }
   }
