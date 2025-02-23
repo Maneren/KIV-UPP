@@ -218,11 +218,19 @@ int main(int argc, char *argv[]) {
   }
 
   {
+    auto start = std::chrono::high_resolution_clock::now();
     std::ofstream outlier_file("output/vykyvy.csv");
     outlier_file << "id;mesic;rok;rozdil" << std::endl;
     for (const auto &outlier : outliers) {
       outlier_file << outlier.station_id << ";" << outlier.month << ";"
                    << outlier.year << ";" << outlier.difference << std::endl;
+    }
+    if constexpr (PERF_TEST) {
+      auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                         (std::chrono::high_resolution_clock::now() - start))
+                         .count();
+      std::println("Saved {} outliers to file in {} μs", outliers.size(),
+                   elapsed);
     }
   }
 
