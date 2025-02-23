@@ -164,7 +164,8 @@ public:
             typename Item = std::ranges::range_value_t<Range>, typename Functor,
             typename Result = std::invoke_result_t<Functor, Item &>>
   inline void for_each(Range &&range, Functor &&functor) {
-    static_assert(std::is_same_v<Result, void>);
+    static_assert(std::is_same_v<Result, void>,
+                  "for_each functor should return void");
 
     for (auto &future : transform(range, std::forward<Functor>(functor))) {
       future.wait();

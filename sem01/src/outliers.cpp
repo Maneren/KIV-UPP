@@ -45,7 +45,7 @@ calculate_monthly_stats(const Station &station) {
 
 StationMonthlyAverages calculate_monthly_averages(const Station &station,
                                                   Outliers &outliers) {
-  auto [averages, min_maxes] = calculate_monthly_stats(station);
+  const auto [averages, min_maxes] = calculate_monthly_stats(station);
 
   for (const auto [i, item] :
        std::views::zip(averages, min_maxes) | std::views::enumerate) {
