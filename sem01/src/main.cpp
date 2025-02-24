@@ -198,40 +198,28 @@ int main(int argc, char *argv[]) {
   auto detector = choose_by_mode<OutlierDetector, SerialOutlierDetector,
                                  ParallelOutlierDetector>(config.mode());
 
-  auto [averages, outliers] = detector->find_averages_and_outliers(stations);
+  std::ofstream outlier_file("output/vykyvy.csv");
+  outlier_file << "id;mesic;rok;rozdil" << std::endl;
+  auto [averages, outlier_count] =
+      detector->find_averages_and_outliers(stations, outlier_file);
 
   if constexpr (PERF_TEST) {
     size_t total = 0;
     for (size_t i = 0; i < TEST_RUNS; i++) {
       auto start = std::chrono::high_resolution_clock::now();
 
-      auto [averages, outliers] =
-          detector->find_averages_and_outliers(stations);
+      std::ofstream outlier_file("output/vykyvy.csv");
+      outlier_file << "id;mesic;rok;rozdil" << std::endl;
+      auto [averages, outlier_count] =
+          detector->find_averages_and_outliers(stations, outlier_file);
 
       total += std::chrono::duration_cast<std::chrono::microseconds>(
                    (std::chrono::high_resolution_clock::now() - start))
                    .count();
     }
 
-    std::println("Detected {} outliers in {} μs", outliers.size(),
+    std::println("Detected {} outliers in {} μs", outlier_count,
                  total / TEST_RUNS);
-  }
-
-  {
-    auto start = std::chrono::high_resolution_clock::now();
-    std::ofstream outlier_file("output/vykyvy.csv");
-    outlier_file << "id;mesic;rok;rozdil" << std::endl;
-    for (const auto &outlier : outliers) {
-      outlier_file << outlier.station_id << ";" << outlier.month << ";"
-                   << outlier.year << ";" << outlier.difference << std::endl;
-    }
-    if constexpr (PERF_TEST) {
-      auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-                         (std::chrono::high_resolution_clock::now() - start))
-                         .count();
-      std::println("Saved {} outliers to file in {} μs", outliers.size(),
-                   elapsed);
-    }
   }
 
   auto renderer =

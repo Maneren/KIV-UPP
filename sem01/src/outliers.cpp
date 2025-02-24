@@ -21,7 +21,7 @@ calculate_monthly_stats(const Station &station) {
   Temperature running_total{0};
 
   for (const auto &measurement : station.measurements) {
-    const auto month = measurement.month;
+    const auto &month = measurement.month;
 
     if (month != current_month) {
       const auto average = running_total / days;
@@ -44,8 +44,14 @@ calculate_monthly_stats(const Station &station) {
   return {monthly_averages, monthly_minmaxes};
 }
 
-StationMonthlyAverages calculate_monthly_averages(const Station &station,
-                                                  Outliers &outliers) {
+std::string format_outlier(const Outlier &outlier) {
+  return std::format("{};{};{};{}\n", outlier.station_id, outlier.month,
+                     outlier.year, outlier.difference);
+}
+
+StationMonthlyAverages calculate_monthly_averages(
+    const Station &station,
+    const std::function<void(const Outlier &)> &save_outlier) {
   const auto [averages, min_maxes] = calculate_monthly_stats(station);
 
   for (const auto [i, item] :
@@ -62,7 +68,7 @@ StationMonthlyAverages calculate_monthly_averages(const Station &station,
       const auto diff = std::abs(next.second - prev.second);
 
       if (diff > allowed_difference) {
-        outliers.emplace_back(station.id, i + 1, next.first, diff);
+        save_outlier({station.id, static_cast<Month>(i + 1), next.first, diff});
       }
     }
   }
@@ -70,41 +76,50 @@ StationMonthlyAverages calculate_monthly_averages(const Station &station,
   return averages;
 }
 
-std::pair<std::vector<StationMonthlyAverages>, Outliers>
+std::pair<std::vector<StationMonthlyAverages>, size_t>
 SerialOutlierDetector::find_averages_and_outliers(
-    const Stations &stations) const {
-  Outliers outliers;
+    const Stations &stations, std::ostream &outliers) const {
+
+  size_t outliers_count = 0;
+  const std::function<void(const Outlier &)> save_outlier =
+      [&outliers, &outliers_count](const Outlier &outlier) {
+        outliers_count++;
+        outliers << format_outlier(outlier);
+      };
+
   const auto stations_averages =
-      stations | std::views::transform([&outliers](const auto &station) {
-        return calculate_monthly_averages(station, outliers);
+      stations | std::views::transform([save_outlier](const auto &station) {
+        return calculate_monthly_averages(station, save_outlier);
       }) |
       std::ranges::to<std::vector>();
 
-  return {stations_averages, outliers};
+  return {stations_averages, outliers_count};
 }
 
-std::pair<std::vector<StationMonthlyAverages>, Outliers>
+std::pair<std::vector<StationMonthlyAverages>, size_t>
 ParallelOutlierDetector::find_averages_and_outliers(
-    const Stations &stations) const {
-  auto process_station = [](const auto &station) {
-    Outliers outliers;
-    const auto monthly_averages = calculate_monthly_averages(station, outliers);
-    return std::make_pair(monthly_averages, outliers);
+    const Stations &stations, std::ostream &outliers) const {
+
+  size_t outliers_count = 0;
+  std::mutex mutex;
+  const auto save_outlier = [&mutex, &outliers,
+                             &outliers_count](const Outlier &outlier) mutable {
+    const auto formatted = format_outlier(outlier);
+    std::lock_guard lock{mutex};
+    outliers_count++;
+    outliers << formatted;
   };
 
-  std::vector<StationMonthlyAverages> stations_averages;
-  stations_averages.reserve(stations.size());
+  const auto process_station = [&save_outlier](const auto &station) {
+    return calculate_monthly_averages(station, save_outlier);
+  };
 
-  Outliers outliers;
+  const auto stations_averages =
+      pool.transform(stations, process_station) |
+      std::views::transform([](std::future<StationMonthlyAverages> &future) {
+        return future.get();
+      }) |
+      std::ranges::to<std::vector>();
 
-  for (auto &future : pool.transform(stations, process_station)) {
-    const auto &[averages, station_outliers] = future.get();
-
-    stations_averages.push_back(std::move(averages));
-
-    outliers.insert(outliers.end(), station_outliers.begin(),
-                    station_outliers.end());
-  }
-
-  return {stations_averages, outliers};
+  return {stations_averages, outliers_count};
 }
