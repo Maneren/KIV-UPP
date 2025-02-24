@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
                                  ParallelOutlierDetector>(config.mode());
 
   std::ofstream outlier_file("output/vykyvy.csv");
-  outlier_file << "id;mesic;rok;rozdil" << std::endl;
+  outlier_file << OUTLIER_FILE_HEADER << std::endl;
   auto [averages, outlier_count] =
       detector->find_averages_and_outliers(stations, outlier_file);
 
@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
       auto start = std::chrono::high_resolution_clock::now();
 
       std::ofstream outlier_file("output/vykyvy.csv");
-      outlier_file << "id;mesic;rok;rozdil" << std::endl;
+      outlier_file << OUTLIER_FILE_HEADER << std::endl;
       auto [averages, outlier_count] =
           detector->find_averages_and_outliers(stations, outlier_file);
 

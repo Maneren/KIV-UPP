@@ -5,6 +5,8 @@
 
 using StationStats = std::pair<StationMonthlyAverages, Outliers>;
 
+constexpr std::string_view OUTLIER_FILE_HEADER = "id;mesic;rok;rozdil";
+
 class OutlierDetector {
 public:
   virtual ~OutlierDetector() = default;
