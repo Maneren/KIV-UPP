@@ -81,11 +81,10 @@ SerialOutlierDetector::find_averages_and_outliers(
     const Stations &stations, std::ostream &outliers) const {
 
   size_t outliers_count = 0;
-  const std::function<void(const Outlier &)> save_outlier =
-      [&outliers, &outliers_count](const Outlier &outlier) {
-        outliers_count++;
-        outliers << format_outlier(outlier);
-      };
+  const auto save_outlier = [&outliers, &outliers_count](const auto &outlier) {
+    outliers_count++;
+    outliers << format_outlier(outlier);
+  };
 
   const auto stations_averages =
       stations | std::views::transform([save_outlier](const auto &station) {
@@ -103,7 +102,7 @@ ParallelOutlierDetector::find_averages_and_outliers(
   size_t outliers_count = 0;
   std::mutex mutex;
   const auto save_outlier = [&mutex, &outliers,
-                             &outliers_count](const Outlier &outlier) mutable {
+                             &outliers_count](const auto &outlier) mutable {
     const auto formatted = format_outlier(outlier);
     std::lock_guard lock{mutex};
     outliers_count++;
