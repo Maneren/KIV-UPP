@@ -223,15 +223,18 @@ int main(int argc, char *argv[]) {
 
   const auto detector = std::make_unique<SerialOutlierDetector>();
 
+  const auto stats_ptr =
+      std::make_shared<std::vector<StationMonthlyStats>>(stats);
+
   if (config.mode() == ProcessingMode::Serial) {
     std::ofstream outlier_file("output/vykyvy.csv");
     outlier_file << OUTLIER_FILE_HEADER << std::endl;
     detector->find_outliers(stations, stats, outlier_file);
   } else {
-    pool.spawn([&stations, &stats, &detector] {
+    pool.spawn([&stations, stats_ptr, &detector] {
       std::ofstream outlier_file("output/vykyvy.csv");
       outlier_file << OUTLIER_FILE_HEADER << std::endl;
-      detector->find_outliers(stations, stats, outlier_file);
+      detector->find_outliers(stations, *stats_ptr, outlier_file);
     });
   }
 
@@ -243,7 +246,8 @@ int main(int argc, char *argv[]) {
 
       std::ofstream outlier_file("output/vykyvy.csv");
       outlier_file << OUTLIER_FILE_HEADER << std::endl;
-      outlier_count = detector->find_outliers(stations, stats, outlier_file);
+      outlier_count =
+          detector->find_outliers(stations, *stats_ptr, outlier_file);
 
       total += std::chrono::duration_cast<std::chrono::microseconds>(
                    (std::chrono::high_resolution_clock::now() - start))
@@ -257,14 +261,14 @@ int main(int argc, char *argv[]) {
   const auto renderer =
       choose_by_mode<Renderer, SerialRenderer, ParallelRenderer>(config.mode());
 
-  renderer->render_months(stations, stats);
+  renderer->render_months(stations, *stats_ptr);
 
   if constexpr (PERF_TEST) {
     size_t total = 0;
     for (size_t i = 0; i < TEST_RUNS; i++) {
       auto start = std::chrono::high_resolution_clock::now();
 
-      renderer->render_months(stations, stats);
+      renderer->render_months(stations, *stats_ptr);
 
       total += std::chrono::duration_cast<std::chrono::microseconds>(
                    (std::chrono::high_resolution_clock::now() - start))
