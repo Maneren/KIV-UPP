@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <string>
@@ -41,3 +42,7 @@ using Outliers = std::vector<Outlier>;
 using MonthlyAverage = std::pair<Year, Temperature>;
 using MonthlyAverages = std::vector<MonthlyAverage>;
 using StationMonthlyAverages = std::array<MonthlyAverages, 12>;
+using StationMonthlyMinmaxes =
+    std::array<std::ranges::minmax_result<Temperature>, 12>;
+using StationMonthlyStats =
+    std::pair<StationMonthlyAverages, StationMonthlyMinmaxes>;

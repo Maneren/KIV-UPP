@@ -17,13 +17,12 @@ public:
                              const Temperature temperature) const;
 
   void render_month_to_file(const Stations &stations,
-                            const std::vector<StationMonthlyAverages> &averages,
+                            const std::vector<StationMonthlyStats> &stats,
                             const size_t month,
                             const std::string &file_name) const;
 
-  virtual void
-  render_months(const Stations &stations,
-                const std::vector<StationMonthlyAverages> &averages) = 0;
+  virtual void render_months(const Stations &stations,
+                             const std::vector<StationMonthlyStats> &stats) = 0;
 
 protected:
   std::ranges::minmax_result<Temperature> mMinmax;
@@ -41,14 +40,12 @@ protected:
 
 class SerialRenderer final : public Renderer {
 public:
-  void
-  render_months(const Stations &stations,
-                const std::vector<StationMonthlyAverages> &averages) override;
+  void render_months(const Stations &stations,
+                     const std::vector<StationMonthlyStats> &stats) override;
 };
 
 class ParallelRenderer final : public Renderer {
 public:
-  void
-  render_months(const Stations &stations,
-                const std::vector<StationMonthlyAverages> &averages) override;
+  void render_months(const Stations &stations,
+                     const std::vector<StationMonthlyStats> &stats) override;
 };

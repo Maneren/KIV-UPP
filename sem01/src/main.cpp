@@ -4,16 +4,21 @@
 #include "outliers.hpp"
 #include "preprocessor.hpp"
 #include "renderer.hpp"
+#include "stats.hpp"
+#include "threadpool.hpp"
 #include "utils.hpp"
+#include <cstddef>
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <ostream>
 #include <print>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -144,13 +149,13 @@ int main(int argc, char *argv[]) {
 
   std::println("{}", config);
 
-  auto start = std::chrono::high_resolution_clock::now();
+  const auto start = std::chrono::high_resolution_clock::now();
 
   auto stations = read_stations(config.stations_file());
 
   fill_measurements(stations, config.measurements_file());
 
-  auto elapsed = std::chrono::high_resolution_clock::now() - start;
+  const auto elapsed = std::chrono::high_resolution_clock::now() - start;
 
   auto measurements = std::ranges::fold_left(
       stations | std::views::transform(
@@ -163,9 +168,9 @@ int main(int argc, char *argv[]) {
       stations.size(), measurements,
       std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
 
-  auto processing_start = std::chrono::high_resolution_clock::now();
+  const auto processing_start = std::chrono::high_resolution_clock::now();
 
-  auto preprocessor =
+  const auto preprocessor =
       choose_by_mode<Preprocessor, SerialPreprocessor, ParallelPreprocessor>(
           config.mode());
 
@@ -181,7 +186,7 @@ int main(int argc, char *argv[]) {
     size_t total = 0;
     for (size_t i = 0; i < TEST_RUNS; i++) {
       auto stations_test = stations_copy;
-      auto start = std::chrono::high_resolution_clock::now();
+      const auto start = std::chrono::high_resolution_clock::now();
 
       preprocessor->preprocess_data(stations_test);
       stations_test.shrink_to_fit();
@@ -195,23 +200,50 @@ int main(int argc, char *argv[]) {
                  total / TEST_RUNS);
   }
 
-  auto detector = choose_by_mode<OutlierDetector, SerialOutlierDetector,
-                                 ParallelOutlierDetector>(config.mode());
+  const auto stats_calculator =
+      choose_by_mode<Stats, SerialStats, ParallelStats>(config.mode());
 
-  std::ofstream outlier_file("output/vykyvy.csv");
-  outlier_file << OUTLIER_FILE_HEADER << std::endl;
-  auto [averages, outlier_count] =
-      detector->find_averages_and_outliers(stations, outlier_file);
+  const auto stats = stats_calculator->monthly_stats(stations);
 
   if constexpr (PERF_TEST) {
     size_t total = 0;
     for (size_t i = 0; i < TEST_RUNS; i++) {
-      auto start = std::chrono::high_resolution_clock::now();
+      const auto start = std::chrono::high_resolution_clock::now();
+
+      const auto stats_test = stats_calculator->monthly_stats(stations);
+
+      total += std::chrono::duration_cast<std::chrono::microseconds>(
+                   (std::chrono::high_resolution_clock::now() - start))
+                   .count();
+    }
+
+    std::println("Calculated stats for {} stations in {} μs", stations.size(),
+                 total / TEST_RUNS);
+  }
+
+  const auto detector = std::make_unique<SerialOutlierDetector>();
+
+  if (config.mode() == ProcessingMode::Serial) {
+    std::ofstream outlier_file("output/vykyvy.csv");
+    outlier_file << OUTLIER_FILE_HEADER << std::endl;
+    detector->find_outliers(stations, stats, outlier_file);
+  } else {
+    pool.spawn([&stations, &stats, &detector] {
+      std::ofstream outlier_file("output/vykyvy.csv");
+      outlier_file << OUTLIER_FILE_HEADER << std::endl;
+      detector->find_outliers(stations, stats, outlier_file);
+    });
+  }
+
+  if constexpr (PERF_TEST) {
+    size_t total = 0;
+    size_t outlier_count = 0;
+    for (size_t i = 0; i < TEST_RUNS; i++) {
+      const auto start = std::chrono::high_resolution_clock::now();
 
       std::ofstream outlier_file("output/vykyvy.csv");
       outlier_file << OUTLIER_FILE_HEADER << std::endl;
-      auto [averages, outlier_count] =
-          detector->find_averages_and_outliers(stations, outlier_file);
+      outlier_count = detector->find_outliers(stations, stats, outlier_file);
 
       total += std::chrono::duration_cast<std::chrono::microseconds>(
                    (std::chrono::high_resolution_clock::now() - start))
@@ -222,17 +254,17 @@ int main(int argc, char *argv[]) {
                  total / TEST_RUNS);
   }
 
-  auto renderer =
+  const auto renderer =
       choose_by_mode<Renderer, SerialRenderer, ParallelRenderer>(config.mode());
 
-  renderer->render_months(stations, averages);
+  renderer->render_months(stations, stats);
 
   if constexpr (PERF_TEST) {
     size_t total = 0;
     for (size_t i = 0; i < TEST_RUNS; i++) {
       auto start = std::chrono::high_resolution_clock::now();
 
-      renderer->render_months(stations, averages);
+      renderer->render_months(stations, stats);
 
       total += std::chrono::duration_cast<std::chrono::microseconds>(
                    (std::chrono::high_resolution_clock::now() - start))
@@ -243,10 +275,11 @@ int main(int argc, char *argv[]) {
   }
 
   if constexpr (!PERF_TEST) {
-    elapsed = std::chrono::high_resolution_clock::now() - processing_start;
+    const auto elapsed =
+        std::chrono::high_resolution_clock::now() - processing_start;
     std::println(
-        "Processed data in {} ms",
-        std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+        "Processed data in {} μs",
+        std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count());
   }
 
   return 0;

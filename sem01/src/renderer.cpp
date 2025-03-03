@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <format>
 #include <fstream>
+#include <ranges>
 #include <vector>
 
 Renderer::Renderer() {
@@ -42,13 +43,14 @@ std::string Renderer::render_station(const Station &station,
 };
 
 void Renderer::render_month_to_file(
-    const Stations &stations,
-    const std::vector<StationMonthlyAverages> &averages, const size_t month,
-    const std::string &file_name) const {
+    const Stations &stations, const std::vector<StationMonthlyStats> &stats,
+    const size_t month, const std::string &file_name) const {
   std::ofstream svg_file(file_name);
   svg_file << HEADER;
 
-  for (const auto [station, averages] : std::views::zip(stations, averages)) {
+  for (const auto [station, station_stats] : std::views::zip(stations, stats)) {
+    const auto &[averages, _] = station_stats;
+
     const auto month_averages = averages[month] | std::views::values;
 
     const auto average =
@@ -66,33 +68,29 @@ constexpr std::array<std::string_view, 12> MONTHS = {
     "cervenec", "srpen", "zari",   "rijen", "listopad", "prosinec"};
 
 std::ranges::min_max_result<Temperature>
-minmax_station_averages(const std::vector<StationMonthlyAverages> &averages) {
-  return std::ranges::minmax(averages | std::views::join |
-                             std::views::transform([](auto &item) {
-                               return item | std::views::values;
-                             }) |
+minmax_station_averages(const std::vector<StationMonthlyStats> &stats) {
+  return std::ranges::minmax(std::views::keys(stats) | std::views::join |
+                             std::views::transform(std::views::values) |
                              std::views::join);
 }
 
 void SerialRenderer::render_months(
-    const Stations &stations,
-    const std::vector<StationMonthlyAverages> &averages) {
-  mMinmax = minmax_station_averages(averages);
+    const Stations &stations, const std::vector<StationMonthlyStats> &stats) {
+  mMinmax = minmax_station_averages(stats);
 
   for (const auto [i, month] : MONTHS | std::views::enumerate) {
-    render_month_to_file(stations, averages, i,
+    render_month_to_file(stations, stats, i,
                          std::format("output/{}.svg", month));
   }
 }
 
 void ParallelRenderer::render_months(
-    const Stations &stations,
-    const std::vector<StationMonthlyAverages> &averages) {
-  mMinmax = minmax_station_averages(averages);
+    const Stations &stations, const std::vector<StationMonthlyStats> &stats) {
+  mMinmax = minmax_station_averages(stats);
 
   pool.for_each(MONTHS | std::views::enumerate, [&, this](const auto item) {
     const auto &[i, month] = item;
-    render_month_to_file(stations, averages, i,
+    render_month_to_file(stations, stats, i,
                          std::format("output/{}.svg", month));
   });
 }

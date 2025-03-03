@@ -6,7 +6,7 @@ project(
   DESCRIPTION "Semester project #1 for KIV/UPP"
   LANGUAGES CXX)
 
-add_compile_options(-Wall -Wextra -Wpedantic)
+add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-lambda-capture)
 # add_compile_options(-fsanitize=address)
 # add_link_options(-fsanitize=address)
 
@@ -23,5 +23,6 @@ add_executable(
   src/outliers.cpp
   src/preprocessor.cpp
   src/renderer.cpp
+  src/stats.cpp
   src/threadpool.cpp
 )
