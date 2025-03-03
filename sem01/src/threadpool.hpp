@@ -1,12 +1,64 @@
 #pragma once
 
+#include <atomic>
+#include <cassert>
+#include <cstddef>
+#include <deque>
 #include <functional>
 #include <future>
+#include <memory>
 #include <queue>
 #include <ranges>
 #include <thread>
 #include <utility>
 #include <vector>
+
+using Task = std::function<void()>;
+
+class Threadpool;
+
+class WorkerThread {
+public:
+  WorkerThread(size_t index);
+  ~WorkerThread();
+
+  WorkerThread(const WorkerThread &) = delete;
+  WorkerThread &operator=(const WorkerThread &) = delete;
+
+  WorkerThread(WorkerThread &&other) {
+    index = other.index;
+    mThread = std::move(other.mThread);
+    tasks = std::move(other.tasks);
+  }
+  WorkerThread &operator=(WorkerThread &&other) {
+    index = other.index;
+    mThread = std::move(other.mThread);
+    tasks = std::move(other.tasks);
+    return *this;
+  };
+
+  void push(Task &&task);
+
+private:
+  bool has_work() {
+    // std::unique_lock<std::mutex> lock(mMutex);
+    return !tasks.empty();
+  }
+
+  std::optional<Task> find_work();
+  std::optional<Task> pop_local();
+  std::optional<Task> pop_global();
+  std::optional<Task> steal();
+
+  size_t index;
+  std::thread mThread;
+  std::mutex mMutex;
+  std::condition_variable mCondition;
+  std::deque<std::function<void()>> tasks;
+  // std::atomic<std::shared_ptr<Threadpool>> pool;
+
+  friend class Threadpool;
+};
 
 /**
  * @class Threadpool
@@ -50,7 +102,7 @@ public:
   Threadpool(Threadpool &&other) {
     mWorkers = std::move(other.mWorkers);
     mTasks = std::move(other.mTasks);
-    mRunning = std::move(other.mRunning);
+    mRunning = other.mRunning.load();
   }
 
   /**
@@ -63,7 +115,7 @@ public:
   Threadpool &operator=(Threadpool &&other) {
     mWorkers = std::move(other.mWorkers);
     mTasks = std::move(other.mTasks);
-    mRunning = std::move(other.mRunning);
+    mRunning = other.mRunning.load();
     return *this;
   }
 
@@ -95,13 +147,7 @@ public:
    *
    * @param task The function to execute.
    */
-  inline void spawn(std::function<void()> &&task) {
-    {
-      std::unique_lock<std::mutex> lock(mMutex);
-      mTasks.emplace(std::move(task));
-    }
-    mCondition.notify_one();
-  }
+  void spawn(Task &&task);
 
   /**
    * @brief Spawn a task.
@@ -203,12 +249,27 @@ public:
     }
   }
 
+  std::optional<Task> pop_task() {
+    std::unique_lock<std::mutex> lock(mMutex);
+    if (mTasks.empty())
+      return std::nullopt;
+    auto task = std::move(mTasks.front());
+    mTasks.pop();
+    return task;
+  }
+
+  std::optional<Task> steal_task(size_t index);
+
+  bool has_work() const { return mRunning.load() && !mTasks.empty(); }
+
 private:
-  std::vector<std::jthread> mWorkers;
+  std::vector<WorkerThread> mWorkers;
   std::queue<std::function<void()>> mTasks;
   std::mutex mMutex;
   std::condition_variable mCondition;
-  bool mRunning = true;
+  std::atomic<bool> mRunning = true;
+
+  friend class WorkerThread;
 };
 
 extern Threadpool pool;
