@@ -42,6 +42,7 @@ Furthermore, I split the program into four parts:
 
 - data loading
 - preprocessing
+- calculating statistics
 - outliers detection
 - rendering the visualization
 
@@ -71,12 +72,10 @@ stateDiagram-v2
         PS3 --> PJoin
         PJoin --> Removal
     }
-    Preprocessing --> Outliers
+    Preprocessing --> Stats
     state RFork <<fork>>
-    state RJoin <<join>>
-    Outliers : Outliers detection
-    state Outliers {
-        Averages --> OFork
+    Stats : Statistics calculation
+    state Stats {
         OS1 : Station 1
         OS2 : Station 2
         OS3 : Station ...N
@@ -86,9 +85,9 @@ stateDiagram-v2
         OS1 --> OJoin
         OS2 --> OJoin
         OS3 --> OJoin
-        OJoin --> File
+        OJoin --> Statistics
     }
-    Outliers --> Rendering
+    Stats --> Rendering
     Rendering : SVG rendering
     state Rendering {
       MinMax --> RFork
@@ -104,6 +103,10 @@ stateDiagram-v2
       RM1 --> RS1
       RM2 --> RS2
       RM3 --> RS3
+    }
+    Stats --> Outliers
+    state Outliers {
+        Averages --> File
     }
 ```
 
@@ -122,18 +125,18 @@ the stations that don't pass the check. This allows for all the stations to be
 checked in parallel, but the (comparatively fast) removal is better done later
 serially to prevent excessive locking.
 
+#### Calculating statistics
+
+In this part the average, minimum, and maximum temperatures are calculated for
+each month for each station. This is again independent for each station, so can
+be done in parallel.
+
 #### Outliers detection
 
-Here we have to first calculate the average temperatures and then use them to
-find outliers. Both are quite intuitively parallelizable since they are again
-independent for each station.
-
-Only potential pitfall is the collection of the outliers into one vector. It can
-either be done with one vector synchronized using a mutex lock (direct port of
-the serial version) or by producing a vector for each station and then
-synchronously merging them into one large vector. Testing both showed that they
-are roughly similar in performace, so I chose the latter since it can reuse more
-code from the serial version.
+Here we take the statistics from the previous part and check them for outliers.
+This may be done in parallel for each station, but testing showed it was not
+worth it. However, it helped to run the serial version on a background thread
+while executing the rest of the program as nothing depends on this.
 
 #### SVG rendering
 
@@ -178,22 +181,22 @@ for (auto [i, valid] :
 ```
 
 The overall code structure is nearly identical, but it runs in parallel
-and around 2 times faster[^laptop].
+and around 1.8 times faster[^laptop].
 
 #### Threadpool
 
 After creating the parallel abstraction, I noticed that they spawn hundreds of
 threads, usually for quite small tasks, making the thread creation and deletion
-a major part of the runtime. So I implemented a very basic threadpool and
-altered the parallel abstractions slightly to use it instead of `std::thread`.
-This resulted in major speedups, making the snippet shown above around 2.8 times
-faster than the serial version[^laptop].
+a major part of the runtime. So I implemented a basic threadpool and altered the
+parallel abstractions slightly to use it instead of `std::thread`. This resulted
+in major speedups, making the snippet shown above over 2.5 times faster than
+the serial version instead.
 
 #### Performance testing mode
 
-To improve the precision of the time measurements, I added a `PERF_TEST_MACRO`
-compile-time option that adds code to run individual parts of the code multiple
-times and print the average time.
+To improve the precision of the time measurements while debugging and measuring
+the runtime, I added a `PERF_TEST_MACRO` compile-time option that adds code to
+run individual parts of the code multiple times and print the average time.
 
 ### Results
 
@@ -206,33 +209,41 @@ Tested devices were:
 - laptop: Intel i7-1165G7 (4 cores/8 threads)
 - desktop: AMD Ryzen 7 5800X (8 cores/16 threads)
 
-Both are running on GNU/Linux 6.12 with clang++ v19.1.7, so the software side
-should be fairly comparable.
+Both are running on GNU/Linux 6.12 with clang++ v19.1.7, so the software
+environment should be fairly comparable.
 
 Overall results:
 
 | device  | serial [ms] | parallel [ms] | speedup |
 | ------- | ----------: | ------------: | ------: |
-| laptop  |          27 |            13 |    2.08 |
-| desktop |          14 |             7 |       2 |
+| laptop  |        16.5 |             6 |    2.75 |
+| desktop |        13.8 |           7.4 |    1.86 |
 
 Split by parts (with `PERF_TEST_MACRO` enabled):
 
 | part          | device  | serial [μs] | parallel [μs] | speedup |
 | ------------- | ------- | ----------: | ------------: | ------: |
-| preprocessing | laptop  |        6063 |          2200 |    2.75 |
-|               | desktop |        4311 |          3145 |    1.37 |
-| outliers      | laptop  |        7068 |          2900 |    2.44 |
-|               | desktop |        6296 |          2930 |    1.79 |
-| rendering     | laptop  |        6669 |          1947 |    3.43 |
-|               | desktop |        2588 |           671 |    3.86 |
+| preprocessing | laptop  |        5927 |          2026 |    2.93 |
+|               | desktop |             |               |         |
+| stats         | laptop  |        6554 |          2085 |    3.14 |
+|               | desktop |             |               |         |
+| outliers      | laptop  |         780 |           798 |    0.98 |
+|               | desktop |             |               |         |
+| rendering     | laptop  |        1766 |           930 |    1.90 |
+|               | desktop |             |               |         |
 
-Interestingly, while the desktop was faster overall, the performance difference
-varies noticeably between the parts of the program. Also, surprisingly, the
-speedups from parallelization are overall much more noticeable on the laptop,
-which has half as many cores. I suspect that large part of that is due to
-external factors (mainly the disk latency when writing the files) that are
-overrepresented in the short overall runtime.
+Interestingly, in the earlier version the laptop was overall 2 times slower in
+the serial version and 1.5 times in the parallel. However, after a lot of
+iterations, the laptop that is on paper much slower than the desktop got
+faster and faster eventually outperfoming the desktop. I tried to remove as
+much of external variables as possible, like replacing the actual drive with
+a RAM disk, but the results only got more amplified in the “wrong” direction.
+
+I frankly have no idea how this could happen since in other multicore CPU-bound
+benchmarks the desktop is significantly (over 2 times) faster. If I had to guess,
+I would say that the main cause is the already short runtime of the serial
+version, leaving very few opportunities for improvement and outsized impact of
+spurious performace fluctuations.
 
 #### Metrics
 
@@ -247,13 +258,13 @@ $$
 For the laptop this is results in:
 
 $$
-\eta = \frac{2.08}{4} = 0.52
+\eta = \frac{2.75}{4} = 0.69
 $$
 
 For the desktop this results in:
 
 $$
-\eta = \frac{2}{8} = 0.25
+\eta = \frac{2}{8} = 0.23
 $$
 
 ##### Amdahl's law
@@ -266,35 +277,27 @@ $$
     {(1 - \text{parallelizable}) + \frac{\text{parallelizable}}{\text{cores}}}
 $$
 
-Approximating from `perf` measurements[^perf-approximation]:
-
-- preprocessing is 92% parallelizable
-- outlier detection is 88% parallelizable
-- rendering is 99% parallelizable
-
-<!-- TODO: recompute the parallelization -->
-
-That means the whole processing is (in theory) 82.8% parallelizable (weighted
-average of the above).
+Approximating from `perf` measurements[^perf-approximation], the whole processing
+is (in theory) around 85% parallelizable.
 
 So for the laptop, I get:
 
 $$
-\text{speedup} = \frac{1}{(1 - 0.828) + \frac{0.828}{4}} = 2.64
+\text{speedup} = \frac{1}{(1 - 0.85) + \frac{0.85}{4}} = 2.76
 $$
 
-Which is, as expected, more than the measured speedup of $2.08$, but not that far
-off. However, for the desktop, I get:
+Which is remarkably close to the measured speedup of $2.75$. On the other hand,
+for the desktop the theory predicts:
 
 $$
-\text{speedup} = \frac{1}{(1 - 0.828) + \frac{0.828}{8}} = 3.63
+\text{speedup} = \frac{1}{(1 - 0.8) + \frac{0.8}{8}} = 3.9
 $$
 
-Which is way more than the measured speedup of $1.72$.
+Which is way more than the measured speedup of $1.86$.
 
 ##### Gustafson's law
 
-Gustafson's law is similar to Amdahl's:
+Gustafson's law is defined as:
 
 $$
 \text{speedup} = (1 - a)P + a
@@ -303,14 +306,16 @@ $$
 For the laptop:
 
 $$
-\text{speedup} = (1 - 0.828)4 + 0.828 = 1.52
+\text{speedup} = (1 - 0.85)4 + 0.85 = 1.45
 $$
 
 And for the desktop:
 
 $$
-\text{speedup} = (1 - 0.828)8 + 0.828 = 2.2
+\text{speedup} = (1 - 0.85)8 + 0.85 = 2.5
 $$
+
+Which both have seemingly no relation to the measured values whatsoever.
 
 [^standard]:
     Custom made, because the standard library parallel algorithms have poor
