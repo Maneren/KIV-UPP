@@ -11,6 +11,7 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <ostream>
 #include <print>
@@ -18,7 +19,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -69,6 +69,53 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
   return stations;
 }
 
+size_t str_to_number(auto str) {
+  size_t result = 0;
+  for (const char c : str) {
+    result *= 10;
+    result += c - '0';
+  }
+  return result;
+}
+
+Temperature str_to_temperature(auto str) {
+  Temperature result = 0.;
+  bool dot = false;
+  size_t power = 10;
+
+  Temperature signum = 1.;
+  if (str[0] == '-') {
+    signum = -1.;
+    str = str | std::views::drop(1);
+  }
+
+  for (const char c : str) {
+    if (c == '.') {
+      // if (dot)
+      //   throw std::runtime_error("Invalid temperature format.");
+
+      dot = true;
+      power = 10;
+      continue;
+    }
+
+    if (!std::isdigit(c))
+      break;
+
+    double digit = c - '0';
+
+    if (!dot) {
+      result *= 10;
+      result += digit;
+    } else {
+      result += digit / power;
+      power *= 10;
+    }
+  }
+
+  return result * signum;
+}
+
 void fill_measurements(Stations &stations,
                        const std::filesystem::path &input_filepath) {
   std::ifstream file(input_filepath);
@@ -76,52 +123,54 @@ void fill_measurements(Stations &stations,
     throw std::runtime_error("Failed to open file.");
   }
 
-  std::string line, field_buffer;
+  std::ostringstream oss;
+  oss << file.rdbuf();
+  std::string file_string = oss.str();
 
-  // Skip the header line
-  std::getline(file, line);
-
-  std::ranges::istream_view<FileLine> file_lines(file);
-
-  for (const auto &file_line : file_lines) {
-    if (file_line.line.empty()) {
+  for (const auto line :
+       std::views::split(std::string_view(file_string), '\n') |
+           std::views::drop(1)) {
+    if (line.empty()) {
       continue;
     }
 
-    auto line_stream = std::istringstream{file_line.line};
+    auto tokens = std::views::split(line, ';');
 
-    if (!std::getline(line_stream, field_buffer, ';')) {
+    auto id_str = tokens.begin();
+    if (id_str == tokens.end()) {
       throw std::runtime_error("Failed to read id field.");
     }
-    std::size_t id = std::stoul(field_buffer);
+    size_t id = str_to_number(*id_str);
 
-    if (id - 1 >= stations.size())
-      throw std::runtime_error("Invalid station ID.");
-
-    if (!std::getline(line_stream, field_buffer, ';')) {
+    auto ordinal_str = std::ranges::next(tokens.begin(), 1);
+    if (ordinal_str == tokens.end()) {
       throw std::runtime_error("Failed to read ordinal field.");
     }
-    std::size_t ordinal = std::stoul(field_buffer);
+    size_t ordinal = str_to_number(*ordinal_str);
 
-    if (!std::getline(line_stream, field_buffer, ';')) {
+    auto year_str = std::ranges::next(tokens.begin(), 2);
+    if (year_str == tokens.end()) {
       throw std::runtime_error("Failed to read year field.");
     }
-    Year year = std::stoul(field_buffer);
+    Year year = str_to_number(*year_str);
 
-    if (!std::getline(line_stream, field_buffer, ';')) {
+    auto month_str = std::ranges::next(tokens.begin(), 3);
+    if (month_str == tokens.end()) {
       throw std::runtime_error("Failed to read month field.");
     }
-    Month month = std::stoul(field_buffer);
+    Month month = str_to_number(*month_str);
 
-    if (!std::getline(line_stream, field_buffer, ';')) {
+    auto day_str = std::ranges::next(tokens.begin(), 4);
+    if (day_str == tokens.end()) {
       throw std::runtime_error("Failed to read day field.");
     }
-    Day day = std::stoul(field_buffer);
+    Day day = str_to_number(*day_str);
 
-    if (!std::getline(line_stream, field_buffer, ';')) {
+    auto value_str = std::ranges::next(tokens.begin(), 5);
+    if (value_str == tokens.end()) {
       throw std::runtime_error("Failed to read value field.");
     }
-    Temperature value = std::stof(field_buffer);
+    Temperature value = str_to_temperature(*value_str);
 
     stations[id - 1].measurements.emplace_back(ordinal, year, month, day,
                                                value);
@@ -277,6 +326,8 @@ int main(int argc, char *argv[]) {
 
     std::println("Rendered SVG files in {} μs", total / TEST_RUNS);
   }
+
+  pool.join();
 
   if constexpr (!PERF_TEST) {
     const auto elapsed =
