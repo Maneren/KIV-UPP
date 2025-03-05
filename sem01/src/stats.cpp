@@ -8,8 +8,8 @@ calculate_monthly_stats(const Station &station) {
   StationMonthlyAverages monthly_averages;
 
   StationMonthlyMinmaxes monthly_minmaxes;
-  monthly_minmaxes.fill({std::numeric_limits<float>::infinity(),
-                         -std::numeric_limits<float>::infinity()});
+  monthly_minmaxes.fill({std::numeric_limits<Temperature>::infinity(),
+                         -std::numeric_limits<Temperature>::infinity()});
 
   Month current_month{station.measurements.front().month};
   size_t days = 0;

@@ -11,7 +11,7 @@ using Year = short;
 using Month = short;
 using Day = short;
 
-using Temperature = float;
+using Temperature = double;
 
 struct Measurement {
   std::size_t ordinal;
