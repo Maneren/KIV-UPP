@@ -237,8 +237,8 @@ Split by parts (with `PERF_TEST_MACRO` enabled):
 
 Interestingly, in the earlier version the laptop was overall 2 times slower in
 the serial version and 1.5 times in the parallel. However, after a lot of
-iterations, the laptop that is on paper much slower than the desktop got
-faster and faster eventually outperfoming the desktop. I tried to remove as
+iterations the laptop, which is on paper much slower[^slower] than the desktop,
+got faster and faster eventually outperfoming the desktop. I tried to remove as
 much of external variables as possible, like replacing the actual drive with
 a RAM disk, but the results only got more amplified in the “wrong” direction.
 
@@ -248,6 +248,11 @@ CPU-bound (both single and multicore) benchmarks the desktop is significantly
 already short runtime of the serial version, leaving very few opportunities for
 improvement and outsized impact of random performace fluctuations due to
 OS scheduling, IO, etc.
+
+EDIT: After few more days of investigation, I found out that the laptop has
+slightly faster RAM which may be a part of the reason it's faster. It lines up
+with the fact that it got more visible in the parallel version where data is
+being copied between threads and also after switching to the RAM disks.
 
 #### Metrics
 
@@ -328,6 +333,11 @@ Which both have seemingly no relation to the measured values whatsoever.
 [^outliers]:
     This part wasn't directly parallelized, only ran in a “background thread” in
     the parallel version. Included just for the sake of completeness.
+
+[^slower]:
+    Compared to the desktop it has: half of the cores, lower boost clock speed
+    (4.7 vs 4.85 GHz), smaller caches (12 vs 32 MB L3), weaker power delivery,
+    and weaker cooling.
 
 [^perf-approximation]:
     That means, how much time relatively was spent in the serial version on the
