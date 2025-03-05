@@ -181,16 +181,19 @@ for (auto [i, valid] :
 ```
 
 The overall code structure is nearly identical, but it runs in parallel
-and around 1.8 times faster[^laptop].
+and around 1.6 times faster on the laptop (see below).
+
+Internally, they just iterate over the range, create a future for each element,
+and wait for all the futures to resolve.
 
 #### Threadpool
 
 After creating the parallel abstraction, I noticed that they spawn hundreds of
 threads, usually for quite small tasks, making the thread creation and deletion
 a major part of the runtime. So I implemented a basic threadpool and altered the
-parallel abstractions slightly to use it instead of `std::thread`. This resulted
-in major speedups, making the snippet shown above over 2.5 times faster than
-the serial version instead.
+parallel abstractions slightly to use it instead. This resulted in a major
+speedup, making the snippet shown above over 2.5 times faster than the serial
+version instead.
 
 #### Performance testing mode
 
@@ -201,8 +204,8 @@ run individual parts of the code multiple times and print the average time.
 ### Results
 
 For total runtime, I decided to omit the data loading part since it takes
-between 1200 and 1300 milliseconds, while all the “interesting” processing
-takes in total less than 30 milliseconds (that is less than 3% of the runtime).
+between 300 and 350 milliseconds, while all the “interesting” processing takes
+in total less than 20 milliseconds (that is around 5% of the total runtime).
 
 Tested devices were:
 
@@ -216,21 +219,21 @@ Overall results:
 
 | device  | serial [ms] | parallel [ms] | speedup |
 | ------- | ----------: | ------------: | ------: |
-| laptop  |        16.5 |             6 |    2.75 |
-| desktop |        13.8 |           7.4 |    1.86 |
+| laptop  |    16.5±1.8 |       6.1±0.6 |    2.70 |
+| desktop |    13.8±0.7 |       7.2±0.2 |    1.92 |
 
 Split by parts (with `PERF_TEST_MACRO` enabled):
 
-| part          | device  | serial [μs] | parallel [μs] | speedup |
-| ------------- | ------- | ----------: | ------------: | ------: |
-| preprocessing | laptop  |        5927 |          2026 |    2.93 |
-|               | desktop |             |               |         |
-| stats         | laptop  |        6554 |          2085 |    3.14 |
-|               | desktop |             |               |         |
-| outliers      | laptop  |         780 |           798 |    0.98 |
-|               | desktop |             |               |         |
-| rendering     | laptop  |        1766 |           930 |    1.90 |
-|               | desktop |             |               |         |
+| part                | device  | serial [μs] | parallel [μs] | speedup |
+| ------------------- | ------- | ----------: | ------------: | ------: |
+| preprocessing       | laptop  |        5927 |          2026 |    2.93 |
+|                     | desktop |        4300 |          3028 |         |
+| stats               | laptop  |        6554 |          2085 |    3.14 |
+|                     | desktop |        5176 |          2561 |         |
+| outliers[^outliers] | laptop  |         780 |           798 |    0.98 |
+|                     | desktop |         725 |           728 |         |
+| rendering           | laptop  |        1766 |           930 |    1.90 |
+|                     | desktop |        1443 |           546 |         |
 
 Interestingly, in the earlier version the laptop was overall 2 times slower in
 the serial version and 1.5 times in the parallel. However, after a lot of
@@ -239,11 +242,12 @@ faster and faster eventually outperfoming the desktop. I tried to remove as
 much of external variables as possible, like replacing the actual drive with
 a RAM disk, but the results only got more amplified in the “wrong” direction.
 
-I frankly have no idea how this could happen since in other multicore CPU-bound
-benchmarks the desktop is significantly (over 2 times) faster. If I had to guess,
-I would say that the main cause is the already short runtime of the serial
-version, leaving very few opportunities for improvement and outsized impact of
-spurious performace fluctuations.
+I frankly have no idea how this could happen since the CSV parsing and in other
+CPU-bound (both single and multicore) benchmarks the desktop is significantly
+(over 2 times) faster. If I had to guess, I would say that the main cause is the
+already short runtime of the serial version, leaving very few opportunities for
+improvement and outsized impact of random performace fluctuations due to
+OS scheduling, IO, etc.
 
 #### Metrics
 
@@ -258,13 +262,13 @@ $$
 For the laptop this is results in:
 
 $$
-\eta = \frac{2.75}{4} = 0.69
+\eta = \frac{2.70}{4} = 0.68
 $$
 
 For the desktop this results in:
 
 $$
-\eta = \frac{2}{8} = 0.23
+\eta = \frac{1.92}{8} = 0.24
 $$
 
 ##### Amdahl's law
@@ -278,7 +282,7 @@ $$
 $$
 
 Approximating from `perf` measurements[^perf-approximation], the whole processing
-is (in theory) around 85% parallelizable.
+is (in theory) around 85% parallelizable[^csv-time].
 
 So for the laptop, I get:
 
@@ -286,14 +290,14 @@ $$
 \text{speedup} = \frac{1}{(1 - 0.85) + \frac{0.85}{4}} = 2.76
 $$
 
-Which is remarkably close to the measured speedup of $2.75$. On the other hand,
+Which is remarkably close to the measured speedup of $2.70$. On the other hand,
 for the desktop the theory predicts:
 
 $$
 \text{speedup} = \frac{1}{(1 - 0.8) + \frac{0.8}{8}} = 3.9
 $$
 
-Which is way more than the measured speedup of $1.86$.
+Which is way more than the measured speedup of $1.92$.
 
 ##### Gustafson's law
 
@@ -321,10 +325,14 @@ Which both have seemingly no relation to the measured values whatsoever.
     Custom made, because the standard library parallel algorithms have poor
     support across compilers.
 
-[^laptop]: On the laptop with Intel i7-1165G7 (4 cores/8 threads)
+[^outliers]:
+    This part wasn't directly parallelized, only ran in a “background thread” in
+    the parallel version. Included just for the sake of completeness.
 
 [^perf-approximation]:
     That means, how much time relatively was spent in the serial version on the
     tasks that were later successfully parallelized. E.g. preprocessing spent
     99% of the time validating the stations and 1% on removing them from the
     vector.
+
+[^csv-time]: If CSV parsing was included, it would be only
