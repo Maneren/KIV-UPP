@@ -10,7 +10,7 @@ add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-lambda-capture)
 # add_compile_options(-fsanitize=address)
 # add_link_options(-fsanitize=address)
 
-add_compile_definitions(PERF_TEST_MACRO)
+# add_compile_definitions(PERF_TEST_MACRO)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
