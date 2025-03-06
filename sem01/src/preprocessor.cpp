@@ -11,7 +11,7 @@ bool valid_station(const Station &station) {
 
   const auto time_span = last_year - first_year;
 
-  return time_span >= 5 && station.measurements.size() / time_span >= 300;
+  return time_span >= 4 && station.measurements.size() / time_span >= 300;
 }
 
 template <typename T>
