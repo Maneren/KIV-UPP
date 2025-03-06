@@ -345,4 +345,6 @@ Which both have seemingly no relation to the measured values whatsoever.
     99% of the time validating the stations and 1% on removing them from the
     vector.
 
-[^csv-time]: If CSV parsing was included, it would be only
+[^csv-time]:
+    If CSV parsing was included, it would be only 3% parallelizable, which
+    defeats the purpose of the exercise.
