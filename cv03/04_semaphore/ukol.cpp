@@ -12,26 +12,34 @@
  * text spravne prostridal
  */
 
-// TODO: SEM DOPLNTE SEMAFORY
+Semaphore sem_ukol(1);
 
 void A() {
-
+  sem_ukol.P(2);
   std::cout << "vlakna ";
+  sem_ukol.V(3);
 
+  sem_ukol.P(5);
   std::cout << "sranda ";
+  sem_ukol.V(1);
 }
 
 void B() {
-
+  sem_ukol.P(1);
   std::cout << "Synchronizovat ";
+  sem_ukol.V(2);
 
+  sem_ukol.P(3);
   std::cout << "neni ";
+  sem_ukol.V(4);
 }
 
-void C() { std::cout << "zadna "; }
+void C() {
+  sem_ukol.P(4);
+  std::cout << "zadna ";
+  sem_ukol.V(5);
+}
 
-// tuto funkci pak odnekud zavolejte - vymazte obsah main() a volejte ji
-// tamodtud
 void ukol() {
 
   std::cout << "Moudro dne: ";

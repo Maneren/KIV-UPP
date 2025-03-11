@@ -1,31 +1,23 @@
 #pragma once
 
-#include <mutex>
+#include <atomic>
+#include <thread>
 
-/*
- * POZOR: tato implementace semaforu nebude fungovat - zakladni predpoklad je, ze metody P a V jsou atomicke
- *        tady ale nic atomicitu nezarucuje!
- */
 class Semaphore {
-	private:
-		int counter;
+private:
+  std::atomic<int> counter;
 
-	public:
-		Semaphore(int init) : counter(init) {}
+public:
+  Semaphore(int init) : counter(init) {}
 
-		void P(int cnt) {
-			while (counter < cnt) {
-				;
-			}
+  void P(int cnt) {
+    while (counter.load(std::memory_order_acquire) < cnt)
+      std::this_thread::yield();
 
-			counter -= cnt;
-		}
+    counter.fetch_sub(cnt, std::memory_order_release);
+  }
 
-		void V(int cnt) {
-			counter += cnt;
-		}
+  void V(int cnt) { counter.fetch_add(cnt, std::memory_order_acq_rel); }
 
-		int Get() {
-			return counter;
-		}
+  int Get() { return counter.load(std::memory_order_relaxed); }
 };
