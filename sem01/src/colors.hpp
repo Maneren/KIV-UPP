@@ -1,6 +1,4 @@
-/**
- * Courtesy of my last 2024 project from Computer Graphics.
- */
+/* Adapted from my project for the Introduction to Computer Graphics course. */
 
 struct Color {
   unsigned char r, g, b, a;

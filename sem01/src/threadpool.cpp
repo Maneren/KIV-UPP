@@ -12,6 +12,7 @@ Threadpool::Threadpool(size_t thread_count) {
         {
           std::unique_lock<std::mutex> lock(mMutex);
           mCondition.wait(lock,
+                          // shutting down or task available
                           [this] { return !mRunning || !mTasks.empty(); });
 
           if (!mRunning && mTasks.empty())

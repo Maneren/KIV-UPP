@@ -10,14 +10,14 @@
 
 /**
  * @class Threadpool
- * @brief Manage and execute tasks concurrently using a thread pool.
+ * @brief A thread pool for managing and executing tasks concurrently.
  *
- * This class provides a thread pool that allows for spawning tasks with or
- * without futures (return values) or various forms of parallel ranges
- * processing.
+ * This class provides functionality to spawn tasks with or without return
+ * values (futures) and supports parallel processing of ranges. It simplifies
+ * concurrent task execution by managing a pool of worker threads.
  *
- * @note The thread pool size is by default determined by the available hardware
- * concurrency.
+ * @note By default, the thread pool size is determined by the number of
+ * hardware threads available on the system.
  */
 class Threadpool {
 public:
@@ -29,7 +29,7 @@ public:
   Threadpool(size_t thread_count = std::thread::hardware_concurrency());
 
   /**
-   * @brief Destroy the Threadpool object, joining all worker threads.
+   * @brief Destroy the Threadpool object and joins all worker threads.
    */
   ~Threadpool() { join(); }
 
@@ -68,16 +68,17 @@ public:
   }
 
   /**
-   * @brief Spawn a task and return a future to retrieve the result.
+   * @brief Spawn a task and returns a future to retrieve its result.
    *
-   * @tparam Functor The type of the function to execute.
-   * @tparam Args The types of the arguments to pass to the function.
-   * @tparam Result The return type of the function.
+   * @tparam Functor The type of the callable object to execute.
+   * @tparam Args The types of the arguments to pass to the callable object.
+   * @tparam Result The return type of the callable object.
    *
-   * @param f The function to execute.
-   * @param args The arguments to pass to the function.
+   * @param f The callable object to execute.
+   * @param args The arguments to pass to the callable object.
    *
-   * @return std::future<Result> A future to retrieve the result of the task.
+   * @return std::future<Result> A future that can be used to retrieve the
+   * result of the task once it completes.
    */
   template <typename Functor, typename... Args,
             typename Result = std::invoke_result_t<Functor, Args...>>
@@ -91,9 +92,9 @@ public:
   }
 
   /**
-   * @brief Spawn a task.
+   * @brief Spawn a task to be executed by the thread pool.
    *
-   * @param task The function to execute.
+   * @param task A callable object representing the task to execute.
    */
   inline void spawn(std::function<void()> &&task) {
     {
@@ -104,7 +105,7 @@ public:
   }
 
   /**
-   * @brief Spawn a task.
+   * @brief Spawn a background task inside the thread pool.
    *
    * @tparam F The type of the function to execute.
    * @tparam Args The types of the arguments to pass to the function.
@@ -117,29 +118,35 @@ public:
   inline void spawn(F &&f, Args &&...args) {
     static_assert(std::is_same_v<std::invoke_result_t<F, Args...>, void>,
                   "The function must not return any value.");
+    // This may be better handled by a lambda-capture, to prevent unneccessary
+    // binder objects, but I can't get it to work with the forwarding. It has to
+    // be able to pass args both as references and as values, but I only managed
+    // to get it to work as values.
     spawn(static_cast<std::function<void()>>(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...)));
   }
 
   /**
-   * @brief Gracefully stop the thread pool and join all worker threads
-   * (automatically called by the destructor).
+   * @brief Gracefully stop the thread pool and joins all worker threads.
+   *
+   * This method ensures that all tasks are completed before the thread pool
+   * shuts down. It is automatically called by the destructor.
    */
   void join();
 
   /**
-   * @brief Transform a range of data using a functor and return a vector of
-   * futures.
+   * @brief Transform a range into a vector of futures by applying a functor
+   * to each element in parallel.
    *
-   * @tparam Range The type of the range.
+   * @tparam Range The type of the input range.
    * @tparam Item The type of the elements in the range.
-   * @tparam Functor The type of the functor.
-   * @tparam Result The return type of the functor.
+   * @tparam Functor The type of the callable object to apply.
+   * @tparam Result The return type of the callable object.
    *
-   * @param range The range of data to transform.
-   * @param functor The functor to apply to each element of the range.
+   * @param range The range of elements to transform.
+   * @param functor The callable object to apply to each element of the range.
    *
-   * @return std::vector<std::future<Result>> A vector of futures to retrieve
+   * @return std::vector<std::future<Result>> A vector of futures representing
    * the results of the transformations.
    */
   template <std::ranges::input_range Range,
@@ -154,18 +161,18 @@ public:
   }
 
   /**
-   * @brief Transform a range of data using a functor and return a vector of
-   * futures.
+   * @brief Transform a range into a vector of futures by applying a functor
+   * to each element in parallel.
    *
-   * @tparam Range The type of the range.
+   * @tparam Range The type of the input range.
    * @tparam Item The type of the elements in the range.
-   * @tparam Functor The type of the functor.
-   * @tparam Result The return type of the functor.
+   * @tparam Functor The type of the callable object to apply.
+   * @tparam Result The return type of the callable object.
    *
-   * @param range The range of data to transform.
-   * @param functor The functor to apply to each element of the range.
+   * @param range The range of elements to transform.
+   * @param functor The callable object to apply to each element of the range.
    *
-   * @return std::vector<std::future<Result>> A vector of futures to retrieve
+   * @return std::vector<std::future<Result>> A vector of futures representing
    * the results of the transformations.
    */
   template <std::ranges::input_range Range,
@@ -180,15 +187,15 @@ public:
   }
 
   /**
-   * @brief Apply a functor to each element of a range.
+   * @brief Apply a callable object to each element of a range in parallel.
    *
-   * @tparam Range The type of the range.
+   * @tparam Range The type of the input range.
    * @tparam Item The type of the elements in the range.
-   * @tparam Functor The type of the functor.
-   * @tparam Result The return type of the functor (should be void).
+   * @tparam Functor The type of the callable object to apply.
+   * @tparam Result The return type of the callable object (must be void).
    *
-   * @param range The range of data to process.
-   * @param functor The functor to apply to each element of the range.
+   * @param range The range of elements to process.
+   * @param functor The callable object to apply to each element of the range.
    */
   template <std::ranges::input_range Range,
             typename Item = std::ranges::range_value_t<Range>, typename Functor,
@@ -211,4 +218,7 @@ private:
   bool mRunning = true;
 };
 
+/**
+ * @brief A global thread pool instance initialized at program startup.
+ */
 extern Threadpool pool;
