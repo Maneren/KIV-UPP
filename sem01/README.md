@@ -203,16 +203,18 @@ run individual parts of the code multiple times and print the average time.
 
 ### Results
 
-For total runtime, I decided to omit the data loading part since it takes
-between 300 and 350 milliseconds, while all the “interesting” processing takes
-in total less than 20 milliseconds (that is around 5% of the total runtime).
+For total runtime, I decided to omit the data loading part. It takes around
+~~1500~~ ~~800~~ ~~600~~ ~~300~~ 220 milliseconds and is both hard to parallelize
+and strongly dependent on the OS and hard drive, while all the “interesting”
+parallelizable processing takes in total less than ~~100~~ ~~40~~ 20 milliseconds
+(that is around 5% of the total runtime).
 
 Tested devices were:
 
 - laptop: Intel i7-1165G7 (4 cores/8 threads)
 - desktop: AMD Ryzen 7 5800X (8 cores/16 threads)
 
-Both are running on GNU/Linux 6.12 with clang++ v19.1.7, so the software
+Both are running on GNU/Linux 6.13 with clang++ v19.1.7, so the software
 environment should be fairly comparable.
 
 Overall results:
@@ -221,19 +223,6 @@ Overall results:
 | ------- | ----------: | ------------: | ------: |
 | laptop  |    16.5±1.8 |       6.1±0.6 |    2.70 |
 | desktop |    13.8±0.7 |       7.2±0.2 |    1.92 |
-
-Split by parts (with `PERF_TEST_MACRO` enabled):
-
-| part                | device  | serial [μs] | parallel [μs] | speedup |
-| ------------------- | ------- | ----------: | ------------: | ------: |
-| preprocessing       | laptop  |        5927 |          2026 |    2.93 |
-|                     | desktop |        4300 |          3028 |         |
-| stats               | laptop  |        6554 |          2085 |    3.14 |
-|                     | desktop |        5176 |          2561 |         |
-| outliers[^outliers] | laptop  |         780 |           798 |    0.98 |
-|                     | desktop |         725 |           728 |         |
-| rendering           | laptop  |        1766 |           930 |    1.90 |
-|                     | desktop |        1443 |           546 |         |
 
 Interestingly, in the earlier version the laptop was overall 2 times slower in
 the serial version and 1.5 times in the parallel. However, after a lot of
@@ -252,7 +241,22 @@ OS scheduling, IO, etc.
 EDIT: After few more days of investigation, I found out that the laptop has
 slightly faster RAM which may be a part of the reason it's faster. It lines up
 with the fact that it got more visible in the parallel version where data is
-being copied between threads and also after switching to the RAM disks.
+being copied between threads and also when measuring with RAM disks.
+
+While debugging, I also noted down the runtimes of the individual parts of the
+program (see [Performance testing mode](#performance-testing-mode)). I include
+them here for reference and for comparison with the results above.
+
+| part                | device  | serial [μs] | parallel [μs] | speedup |
+| ------------------- | ------- | ----------: | ------------: | ------: |
+| preprocessing       | laptop  |        5927 |          2026 |    2.93 |
+|                     | desktop |        4300 |          3028 |    1.42 |
+| stats               | laptop  |        6554 |          2085 |    3.14 |
+|                     | desktop |        5176 |          2561 |    2.02 |
+| outliers[^outliers] | laptop  |         780 |           798 |    0.98 |
+|                     | desktop |         832 |           832 |    1.00 |
+| rendering           | laptop  |        1766 |           930 |    1.90 |
+|                     | desktop |        1443 |           546 |    2.64 |
 
 #### Metrics
 
@@ -340,11 +344,12 @@ Which both have seemingly no relation to the measured values whatsoever.
     and weaker cooling.
 
 [^perf-approximation]:
-    That means, how much time relatively was spent in the serial version on the
-    tasks that were later successfully parallelized. E.g. preprocessing spent
-    99% of the time validating the stations and 1% on removing them from the
-    vector.
+    How much time relatively was spent in the serial version on the tasks that
+    were later successfully parallelized as measured by `perf`. E.g. preprocessing
+    spends 98% of the time validating the stations (parallelizable) and 2% on
+    removing them from the vector (not parallelizable), thus being 98%
+    parallelizable.
 
 [^csv-time]:
     If CSV parsing was included, it would be only 3% parallelizable, which
-    defeats the purpose of the exercise.
+    in my opinion defeats the purpose of the exercise.
