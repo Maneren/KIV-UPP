@@ -1,6 +1,5 @@
 #include "config.hpp"
 #include "data.hpp"
-#include "file_line.hpp"
 #include "outliers.hpp"
 #include "preprocessor.hpp"
 #include "renderer.hpp"
@@ -19,56 +18,14 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <utility>
 #include <vector>
 
-Stations read_stations(const std::filesystem::path &input_filepath) {
-  std::ifstream file(input_filepath);
-  if (!file.is_open()) {
-    throw std::runtime_error("Failed to open file.");
-  }
-
-  Stations stations;
-  std::string line, field_buffer;
-
-  // Skip the header line
-  std::getline(file, line);
-
-  std::ranges::istream_view<FileLine> file_lines(file);
-
-  for (const auto &file_line : file_lines) {
-    if (file_line.line.empty()) {
-      continue;
-    }
-
-    auto line_stream = std::istringstream{file_line.line};
-
-    if (!std::getline(line_stream, field_buffer, ';')) {
-      throw std::runtime_error("Failed to read id field.");
-    }
-    size_t id = std::stoul(field_buffer);
-
-    if (!std::getline(line_stream, field_buffer, ';')) {
-      throw std::runtime_error("Failed to read name field.");
-    }
-    std::string name = std::move(field_buffer);
-
-    if (!std::getline(line_stream, field_buffer, ';')) {
-      throw std::runtime_error("Failed to read longitude field.");
-    }
-    float longitude = std::stof(field_buffer);
-
-    if (!std::getline(line_stream, field_buffer, ';')) {
-      throw std::runtime_error("Failed to read latitude field.");
-    }
-    float latitude = std::stof(field_buffer);
-
-    stations.emplace_back(id, name, std::make_pair(latitude, longitude));
-  }
-
-  return stations;
-}
-
+/**
+ * @brief Converts a string to a number.
+ *
+ * Simpler and faster version of stoul optimized for raw speed with no error
+ * or bounds checking.
+ */
 size_t str_to_number(auto str) {
   size_t result = 0;
   for (const char c : str) {
@@ -78,12 +35,18 @@ size_t str_to_number(auto str) {
   return result;
 }
 
-Temperature str_to_temperature(auto str) {
-  Temperature result = 0.;
+/**
+ * @brief Converts a string to a double.
+ *
+ * Simpler and faster version of stod optimized for raw speed with no error
+ * or bounds checking.
+ */
+double str_to_double(auto str) {
+  double result = 0.;
   bool dot = false;
   size_t power = 10;
 
-  Temperature signum = 1.;
+  double signum = 1.;
   if (str[0] == '-') {
     signum = -1.;
     str = str | std::views::drop(1);
@@ -91,9 +54,6 @@ Temperature str_to_temperature(auto str) {
 
   for (const char c : str) {
     if (c == '.') {
-      // if (dot)
-      //   throw std::runtime_error("Invalid temperature format.");
-
       dot = true;
       power = 10;
       continue;
@@ -116,61 +76,113 @@ Temperature str_to_temperature(auto str) {
   return result * signum;
 }
 
-void fill_measurements(Stations &stations,
-                       const std::filesystem::path &input_filepath) {
+Stations read_stations(const std::filesystem::path &input_filepath) {
   std::ifstream file(input_filepath);
   if (!file.is_open()) {
     throw std::runtime_error("Failed to open file.");
   }
 
+  Stations stations;
+
   std::ostringstream oss;
   oss << file.rdbuf();
   std::string file_string = oss.str();
 
-  for (const auto line :
-       std::views::split(std::string_view(file_string), '\n') |
-           std::views::drop(1)) {
-    if (line.empty()) {
+  for (const auto &file_line :
+       std::views::split(file_string, '\n') | std::views::drop(1)) {
+    if (file_line.empty()) {
       continue;
     }
 
-    auto tokens = std::views::split(line, ';');
+    auto tokens = std::views::split(file_line, ';');
+    auto iterator = tokens.begin();
 
-    auto id_str = tokens.begin();
+    auto id_str = iterator++;
     if (id_str == tokens.end()) {
       throw std::runtime_error("Failed to read id field.");
     }
     size_t id = str_to_number(*id_str);
 
-    auto ordinal_str = std::ranges::next(tokens.begin(), 1);
+    auto name_str = iterator++;
+    if (name_str == tokens.end()) {
+      throw std::runtime_error("Failed to read name field.");
+    }
+    std::string name = *name_str | std::ranges::to<std::string>();
+
+    auto longitude_str = iterator++;
+    if (longitude_str == tokens.end()) {
+      throw std::runtime_error("Failed to read longitude field.");
+    }
+    float longitude = str_to_double(*longitude_str);
+
+    auto latitude_str = iterator++;
+    if (latitude_str == tokens.end()) {
+      throw std::runtime_error("Failed to read latitude field.");
+    }
+    float latitude = str_to_double(*latitude_str);
+
+    stations.emplace_back(id, name, std::make_pair(latitude, longitude));
+  }
+
+  return stations;
+}
+
+void fill_measurements(Stations &stations,
+                       const std::filesystem::path &input_filepath) {
+  auto size = std::filesystem::file_size(input_filepath);
+  std::string file_string(size, '\0');
+
+  std::ifstream file(input_filepath);
+  if (!file.is_open()) {
+    throw std::runtime_error("Failed to open file.");
+  }
+
+  file.read(file_string.data(), size);
+
+  for (const auto &line :
+       std::views::split(file_string, '\n') | std::views::drop(1)) {
+    if (line.empty()) {
+      continue;
+    }
+
+    auto tokens = std::views::split(line, ';');
+    auto iterator = tokens.begin();
+
+    auto id_str = iterator++;
+    if (id_str == tokens.end()) {
+      throw std::runtime_error("Failed to read id field.");
+    }
+    size_t id = str_to_number(*id_str);
+
+    auto ordinal_str = iterator++;
     if (ordinal_str == tokens.end()) {
       throw std::runtime_error("Failed to read ordinal field.");
     }
     size_t ordinal = str_to_number(*ordinal_str);
 
-    auto year_str = std::ranges::next(tokens.begin(), 2);
+    auto year_str = iterator++;
     if (year_str == tokens.end()) {
       throw std::runtime_error("Failed to read year field.");
     }
     Year year = str_to_number(*year_str);
 
-    auto month_str = std::ranges::next(tokens.begin(), 3);
+    auto month_str = iterator++;
     if (month_str == tokens.end()) {
       throw std::runtime_error("Failed to read month field.");
     }
     Month month = str_to_number(*month_str);
 
-    auto day_str = std::ranges::next(tokens.begin(), 4);
+    auto day_str = iterator++;
     if (day_str == tokens.end()) {
       throw std::runtime_error("Failed to read day field.");
     }
     Day day = str_to_number(*day_str);
 
-    auto value_str = std::ranges::next(tokens.begin(), 5);
+    auto value_str = iterator++;
     if (value_str == tokens.end()) {
       throw std::runtime_error("Failed to read value field.");
     }
-    Temperature value = str_to_temperature(*value_str);
+    Temperature value = str_to_double(*value_str);
 
     stations[id - 1].measurements.emplace_back(ordinal, year, month, day,
                                                value);
