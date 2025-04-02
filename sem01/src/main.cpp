@@ -13,7 +13,6 @@
 #include <iterator>
 #include <memory>
 #include <ostream>
-#include <print>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
@@ -208,7 +207,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::println("{}", config);
+  std::cout << std::format("{}\n", config);
 
   const auto start = std::chrono::high_resolution_clock::now();
 
@@ -223,9 +222,9 @@ int main(int argc, char *argv[]) {
                      [](auto &station) { return station.measurements.size(); }),
       0, std::plus<>{});
 
-  std::println(
+  std::cout << std::format(
       "Loaded data for {} stations and {} measurements in {} ms. "
-      "Processing...",
+      "Processing...\n",
       stations.size(), measurements,
       std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
 
@@ -257,8 +256,8 @@ int main(int argc, char *argv[]) {
                    .count();
     }
 
-    std::println("Preprocessed {} stations in {} μs", stations.size(),
-                 total / TEST_RUNS);
+    std::cout << std::format("Preprocessed {} stations in {} μs\n",
+                             stations.size(), total / TEST_RUNS);
   }
 
   const auto stats_calculator =
@@ -278,8 +277,8 @@ int main(int argc, char *argv[]) {
                    .count();
     }
 
-    std::println("Calculated stats for {} stations in {} μs", stations.size(),
-                 total / TEST_RUNS);
+    std::cout << std::format("Calculated stats for {} stations in {} μs\n",
+                             stations.size(), total / TEST_RUNS);
   }
 
   const auto detector = std::make_unique<SerialOutlierDetector>();
@@ -315,8 +314,8 @@ int main(int argc, char *argv[]) {
                    .count();
     }
 
-    std::println("Detected {} outliers in {} μs", outlier_count,
-                 total / TEST_RUNS);
+    std::cout << std::format("Detected {} outliers in {} μs\n", outlier_count,
+                             total / TEST_RUNS);
   }
 
   const auto renderer =
@@ -336,7 +335,8 @@ int main(int argc, char *argv[]) {
                    .count();
     }
 
-    std::println("Rendered SVG files in {} μs", total / TEST_RUNS);
+    std::cout << std::format("Rendered SVG files in {} μs\n",
+                             total / TEST_RUNS);
   }
 
   pool.join();
@@ -344,8 +344,8 @@ int main(int argc, char *argv[]) {
   if constexpr (!PERF_TEST) {
     const auto elapsed =
         std::chrono::high_resolution_clock::now() - processing_start;
-    std::println(
-        "Processed data in {} μs",
+    std::cout << std::format(
+        "Processed data in {} μs\n",
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count());
   }
 
