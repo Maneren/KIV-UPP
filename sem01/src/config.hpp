@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <format>
+#include <thread>
 
 enum ProcessingMode { Serial, Parallel };
 
@@ -14,7 +15,8 @@ template <> struct std::formatter<ProcessingMode> {
     if (p == ProcessingMode::Serial) {
       return std::format_to(ctx.out(), "serial");
     } else {
-      return std::format_to(ctx.out(), "parallel");
+      return std::format_to(ctx.out(), "parallel ({} threads)",
+                            std::thread::hardware_concurrency());
     }
   }
 };
