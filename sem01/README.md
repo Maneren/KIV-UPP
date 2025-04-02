@@ -14,7 +14,7 @@ or
 just configure_release build
 ```
 
-With the [just](https://github.com/casey/just) command runner.
+with the [just](https://github.com/casey/just) command runner.
 
 ### Build options
 
@@ -231,17 +231,17 @@ got faster and faster eventually outperfoming the desktop. I tried to remove as
 much of external variables as possible, like replacing the actual drive with
 a RAM disk, but the results only got more amplified in the “wrong” direction.
 
-I frankly have no idea how this could happen since the CSV parsing and in other
-CPU-bound (both single and multicore) benchmarks the desktop is significantly
+I frankly have no idea how this could happen since in the CSV parsing and in
+other CPU-bound (both single and multicore) tasks the desktop is significantly
 (over 2 times) faster. If I had to guess, I would say that the main cause is the
 already short runtime of the serial version, leaving very few opportunities for
 improvement and outsized impact of random performace fluctuations due to
 OS scheduling, IO, etc.
 
 EDIT: After few more days of investigation, I found out that the laptop has
-slightly faster RAM which may be a part of the reason it's faster. It lines up
-with the fact that it got more visible in the parallel version where data is
-being copied between threads and also when measuring with RAM disks.
+slightly higher clocked RAM which may be a part of the reason it's faster. It
+lines up with the fact that it got more visible in the parallel version where
+data is being copied between threads and also when measuring with RAM disks.
 
 While debugging, I also noted down the runtimes of the individual parts of the
 program (see [Performance testing mode](#performance-testing-mode)). I include
