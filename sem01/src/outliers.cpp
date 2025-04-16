@@ -1,5 +1,6 @@
 #include "outliers.hpp"
 #include "threadpool.hpp"
+#include <ostream>
 #include <ranges>
 
 std::string format_outlier(const Outlier &outlier) {
