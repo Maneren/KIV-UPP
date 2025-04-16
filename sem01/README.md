@@ -330,9 +330,7 @@ $$
 
 Which both have seemingly no relation to the measured values whatsoever.
 
-[^standard]:
-    Custom made, because the standard library parallel algorithms have poor
-    support across compilers.
+[^standard]: Custom made but similar to the parallel standard library.
 
 [^outliers]:
     This part wasn't directly parallelized, only ran in a “background thread” in
