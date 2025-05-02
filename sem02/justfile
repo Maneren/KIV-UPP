@@ -1,0 +1,23 @@
+builddir := justfile_directory() / "build"
+export CMAKE_EXPORT_COMPILE_COMMANDS := "1"
+
+[private]
+default:
+    @just --list
+
+configure:
+    mkdir -p {{ builddir }}
+    cmake -DCMAKE_BUILD_TYPE=Debug -B {{ builddir }}
+
+configure_release:
+    mkdir -p {{ builddir }}
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -B {{ builddir }}
+
+build:
+    cmake --build {{ builddir }}
+
+sample: build
+    mpirun -n 2 --host hydra-1,hydra-2 {{ builddir }}/UPP-SP2
+
+clean:
+    rm -rf build
