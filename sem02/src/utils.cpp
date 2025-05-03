@@ -3,6 +3,7 @@
  * Soubory a hlavicku upravujte dle sveho uvazeni a nutnosti
  */
 
+#include <vector>
 #ifdef USE_SSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #endif
@@ -27,7 +28,6 @@ std::string readWholeFile(const std::string &path) {
 }
 
 std::string downloadHTML(const std::string &url) {
-
   std::string scheme;
   std::string rest;
 
@@ -66,17 +66,48 @@ std::string downloadHTML(const std::string &url) {
   return res->body;
 }
 
-std::string URL::toString() const { return scheme + "://" + domain + path; }
+std::string URL::toString() const {
+  auto base = scheme + (scheme.empty() ? "" : "://") + domain;
+
+  const auto res = base + pathToString();
+
+  return res;
+}
+
+std::string URL::pathToString() const {
+  if (path.empty())
+    return "/";
+
+  std::string base;
+  for (auto &p : path) {
+    base += "/";
+    base += p;
+  }
+  return base;
+}
+
+std::vector<std::string> split(const std::string &s, char delim) {
+  if (s.empty())
+    return {};
+
+  std::vector<std::string> elems;
+  std::stringstream ss(s);
+  std::string item;
+  while (std::getline(ss, item, delim)) {
+    elems.push_back(item);
+  }
+  return elems;
+}
 
 URL parseURL(const std::string &url) {
   std::string scheme;
   std::string rest;
 
   // extrahovani schematu a zbytku URL
-  if (url.substr(0, 7) == "http://") {
+  if (url.starts_with("http://")) {
     scheme = "http";
     rest = url.substr(7);
-  } else if (url.substr(0, 8) == "https://") {
+  } else if (url.starts_with("https://")) {
     scheme = "https";
     rest = url.substr(8);
   } else {
@@ -84,21 +115,35 @@ URL parseURL(const std::string &url) {
     rest = url;
   }
 
+  if (rest.ends_with("\r"))
+    rest = rest.substr(0, rest.size() - 1);
+
   size_t pos = rest.find("/");
 
   if (pos == std::string::npos) {
-    return {url, scheme, "", "/" + rest};
+    if (rest.starts_with("/"))
+      rest = rest.substr(1);
+    return {scheme, "", split(rest, '/')};
   }
 
   std::string domain = rest.substr(0, pos);
-  std::string path = rest.substr(pos);
 
-  return {url, scheme, domain, path};
+  if (!domain.contains(".")) {
+    if (rest.starts_with("/"))
+      rest = rest.substr(1);
+
+    return {scheme, "", split(rest, '/')};
+  }
+
+  std::string path = rest.substr(pos + 1);
+  return {scheme, domain, split(path, '/')};
 }
 
 std::string safeURL(const std::string &url) {
   const auto parsed = parseURL(url);
-  std::string result = parsed.domain + parsed.path;
+  std::string result = parsed.domain;
+  for (auto &p : parsed.path)
+    result += "/" + p;
 
   const std::unordered_set<char> whitelist{
       'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',

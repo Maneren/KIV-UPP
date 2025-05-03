@@ -6,6 +6,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace utils {
 // precte cely soubor do retezce
@@ -20,13 +21,13 @@ std::string downloadHTML(const std::string &url);
 
 // struktura reprezentujici URL
 struct URL {
-  std::string string;
-
   std::string scheme;
   std::string domain;
-  std::string path;
+  std::vector<std::string> path;
 
   std::string toString() const;
+
+  std::string pathToString() const;
 };
 
 // prevede URL do struktury

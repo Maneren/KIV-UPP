@@ -59,12 +59,13 @@ HtmlStats parseHTML(const utils::URL &url) {
     headings.emplace_back(std::stoi(match[1]), match[2]);
   }
 
-  return {url.path, images, forms, links, headings};
+  return {url.pathToString(), images, forms, links, headings};
 }
 
 struct SiteGraph {
   std::vector<std::string> nodes;
   std::vector<std::pair<std::string, std::string>> edges;
+  std::vector<std::pair<std::string, HtmlStats>> stats;
 };
 
 std::ostream &operator<<(std::ostream &os, const SiteGraph &graph) {
@@ -83,16 +84,20 @@ SiteGraph map_site(const utils::URL &start_url) {
 
   std::list<utils::URL> queue;
 
+  std::vector<std::pair<std::string, HtmlStats>> site_stats;
+
   queue.push_back(start_url);
 
   while (!queue.empty()) {
     const auto url = queue.front();
     queue.pop_front();
 
-    if (visited.find(url.path) != visited.end()) {
+    const auto path = url.pathToString();
+
+    if (visited.find(path) != visited.end()) {
       continue;
     } else {
-      visited.insert(url.path);
+      visited.insert(path);
     }
 
     auto stats = parseHTML(url);
@@ -104,23 +109,34 @@ SiteGraph map_site(const utils::URL &start_url) {
       if (link.domain.empty())
         link.domain = url.domain;
 
-      if (link.domain != url.domain) {
+      if (link.domain != url.domain)
         continue;
+
+      if (url.path.size() > 1) {
+        link.path.insert(link.path.begin(), url.path.begin(),
+                         url.path.end() - 1);
       }
+
+      if (link.path == url.path)
+        continue;
 
       queue.push_back(link);
 
-      edge_set.emplace(url.path, link.path);
+      edge_set.emplace(path, link.pathToString());
     }
+
+    site_stats.push_back(std::make_pair(path, stats));
   }
 
   std::vector nodes(visited.begin(), visited.end());
   std::vector edges(edge_set.begin(), edge_set.end());
 
-  std::ranges::sort(nodes);
-  std::ranges::sort(edges);
+  ranges::sort(nodes);
+  ranges::sort(edges);
+  ranges::sort(site_stats,
+               [](const auto &a, const auto &b) { return a.first < b.first; });
 
-  return {nodes, edges};
+  return {nodes, edges, site_stats};
 }
 
 void process(const std::vector<std::string> &URLs, std::string &vystup) {
@@ -140,32 +156,21 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
     const auto graph = map_site(utils::parseURL(url));
 
     std::cout << graph << std::endl;
-  }
 
-  // const auto htmls = URLs | views::transform(utils::downloadHTML);
-  //
-  // for (const auto [html, url] : views::zip(htmls, URLs)) {
-  //   const auto stats = parseHTML(html);
-  //
-  //   std::cout << "URL: " << url << std::endl;
-  //
-  //   std::cout << "Images: " << stats.images << std::endl;
-  //   std::cout << "Forms: " << stats.forms << std::endl;
-  //   std::cout << "Links: " << std::endl;
-  //   for (const auto &link : stats.links) {
-  //     std::cout << "\t" << link << std::endl;
-  //   }
-  //   std::cout << "Headings: " << std::endl;
-  //   for (const auto &heading : stats.headings) {
-  //     std::cout << "\t";
-  //
-  //     for (size_t i = 0; i < heading.first; ++i) {
-  //       std::cout << "-";
-  //     }
-  //
-  //     std::cout << " " << heading.second << std::endl;
-  //   }
-  // }
+    for (const auto &stat : graph.stats) {
+      std::cout << "\"" << stat.first << "\"" << std::endl;
+      std::cout << "IMAGES " << stat.second.images << std::endl;
+      std::cout << "LINKS " << stat.second.links.size() << std::endl;
+      std::cout << "FORMS " << stat.second.forms << std::endl;
+      for (const auto &heading : stat.second.headings) {
+        for (size_t i = 0; i < heading.first; ++i) {
+          std::cout << "-";
+        }
+        std::cout << " " << heading.second << std::endl;
+      }
+      std::cout << std::endl;
+    }
+  }
 }
 
 int main(int argc, char **argv) {

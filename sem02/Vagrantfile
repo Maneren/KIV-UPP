@@ -41,7 +41,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       (echo; cat /vagrant/id_rsa.pub) >> /home/vagrant/.ssh/authorized_keys
 
       apt-get -y update
-      apt-get -y upgrade
       apt-get -y install openmpi-bin libopenmpi-dev build-essential g++ cmake just
       touch /etc/.provisioned
     fi

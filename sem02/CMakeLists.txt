@@ -6,6 +6,9 @@ SET(CMAKE_CXX_STANDARD 23)
 
 FILE(GLOB_RECURSE src src/*.cpp src/*.h)
 
+ADD_COMPILE_OPTIONS(-fsanitize=address)
+ADD_LINK_OPTIONS(-fsanitize=address)
+
 # nastavime, ze nechceme pouzivat SSL ve vychozim stavu - pokud chcete, muzete
 # zapnout, abyste se dostali na https
 SET(USE_SSL OFF CACHE BOOL "Use SSL")
