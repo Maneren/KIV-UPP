@@ -42,9 +42,9 @@ std::string downloadHTML(const std::string &url) {
     return ""; // nezname schema
   }
 
-  size_t pos = rest.find("/");
-  std::string domain = rest.substr(0, pos);
-  std::string path = rest.substr(pos);
+  const size_t pos = rest.find("/");
+  const std::string domain = rest.substr(0, pos);
+  const std::string path = rest.substr(pos);
 
   // stahne obsah stranky - pouzije SSL klienta, pokud je pozadovana podpora SSL
 #ifdef USE_SSL
@@ -67,11 +67,8 @@ std::string downloadHTML(const std::string &url) {
 }
 
 std::string URL::toString() const {
-  auto base = scheme + (scheme.empty() ? "" : "://") + domain;
-
-  const auto res = base + pathToString();
-
-  return res;
+  const auto base = scheme + (scheme.empty() ? "" : "://") + domain;
+  return base + pathToString();
 }
 
 std::string URL::pathToString() const {
@@ -118,7 +115,7 @@ URL parseURL(const std::string &url) {
   if (rest.ends_with("\r"))
     rest = rest.substr(0, rest.size() - 1);
 
-  size_t pos = rest.find("/");
+  const size_t pos = rest.find("/");
 
   if (pos == std::string::npos) {
     if (rest.starts_with("/"))
@@ -135,15 +132,13 @@ URL parseURL(const std::string &url) {
     return {scheme, "", split(rest, '/')};
   }
 
-  std::string path = rest.substr(pos + 1);
+  const std::string path = rest.substr(pos + 1);
   return {scheme, domain, split(path, '/')};
 }
 
 std::string safeURL(const std::string &url) {
   const auto parsed = parseURL(url);
-  std::string result = parsed.domain;
-  for (auto &p : parsed.path)
-    result += "/" + p;
+  std::string result = parsed.domain + parsed.pathToString();
 
   const std::unordered_set<char> whitelist{
       'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',

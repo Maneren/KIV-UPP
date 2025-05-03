@@ -7,6 +7,7 @@
 #include <iostream>
 #include <list>
 #include <mpi.h>
+#include <ostream>
 #include <queue>
 #include <ranges>
 #include <regex>
@@ -18,7 +19,6 @@
 #include "server.h"
 #include "utils.h"
 
-namespace views = std::ranges::views;
 namespace ranges = std::ranges;
 
 struct HtmlStats {
@@ -29,19 +29,34 @@ struct HtmlStats {
   std::vector<std::pair<size_t, std::string>> headings;
 };
 
+std::ostream &operator<<(std::ostream &os, const HtmlStats &stats) {
+  std::cout << "IMAGES " << stats.images << std::endl;
+  std::cout << "LINKS " << stats.links.size() << std::endl;
+  std::cout << "FORMS " << stats.forms << std::endl;
+  for (const auto &heading : stats.headings) {
+    for (size_t i = 0; i < heading.first; ++i) {
+      std::cout << "-";
+    }
+    std::cout << " " << heading.second << std::endl;
+  }
+
+  return os;
+}
+
 HtmlStats parseHTML(const utils::URL &url) {
   const std::regex img_regex(R"(<img\b)");
   const std::regex form_regex(R"(<form\b)");
   const std::regex link_regex(R"(<a\b[^>]+href="([^>"]+)\")");
   const std::regex heading_regex(R"(<h([1-6])>(.*?)</h\1>)");
 
+  std::cout << "Parsing " << url.toString() << std::endl;
   const auto html = utils::downloadHTML(url.toString());
 
-  size_t images =
+  const size_t images =
       std::distance(std::sregex_iterator(html.begin(), html.end(), img_regex),
                     std::sregex_iterator());
 
-  size_t forms =
+  const size_t forms =
       std::distance(std::sregex_iterator(html.begin(), html.end(), form_regex),
                     std::sregex_iterator());
 
@@ -159,16 +174,7 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
 
     for (const auto &stat : graph.stats) {
       std::cout << "\"" << stat.first << "\"" << std::endl;
-      std::cout << "IMAGES " << stat.second.images << std::endl;
-      std::cout << "LINKS " << stat.second.links.size() << std::endl;
-      std::cout << "FORMS " << stat.second.forms << std::endl;
-      for (const auto &heading : stat.second.headings) {
-        for (size_t i = 0; i < heading.first; ++i) {
-          std::cout << "-";
-        }
-        std::cout << " " << heading.second << std::endl;
-      }
-      std::cout << std::endl;
+      std::cout << stat.second << std::endl;
     }
   }
 }
