@@ -43,12 +43,12 @@ std::ostream &operator<<(std::ostream &os, const HtmlStats &stats) {
   return os;
 }
 
-HtmlStats parseHTML(const utils::URL &url) {
-  const std::regex img_regex(R"(<img\b)");
-  const std::regex form_regex(R"(<form\b)");
-  const std::regex link_regex(R"(<a\b[^>]+href="([^>"]+)\")");
-  const std::regex heading_regex(R"(<h([1-6])>(.*?)</h\1>)");
+const static std::regex img_regex(R"(<img\b)");
+const static std::regex form_regex(R"(<form\b)");
+const static std::regex link_regex(R"(<a\b[^>]+href="([^>"]+)\")");
+const static std::regex heading_regex(R"(<h([1-6])>(.*?)</h\1>)");
 
+HtmlStats parseHTML(const utils::URL &url) {
   std::cout << "Parsing " << url.toString() << std::endl;
   const auto html = utils::downloadHTML(url.toString());
 
