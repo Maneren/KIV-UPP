@@ -3,6 +3,7 @@
  * Soubory a hlavicku upravujte dle sveho uvazeni a nutnosti
  */
 
+#include <chrono>
 #include <vector>
 #ifdef USE_SSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
@@ -83,11 +84,11 @@ std::vector<std::string> split(const std::string &s, char delim) {
   return elems;
 }
 
-// https://github.com/yhirose/cpp-httplib/issues/453
-const static std::regex URL_REGEX(
-    R"(^(?:(https?):)?(?://([^:/?#]*)(?::(\d+))?)?([^?#]*(?:\?[^#]*)?)(?:#.*)?)");
-
 URL parseURL(const std::string &url) {
+  // https://github.com/yhirose/cpp-httplib/issues/453
+  const static std::regex URL_REGEX(
+      R"(^(?:(https?):)?(?://([^:/?#]*)(?::(\d+))?)?([^?#]*(?:\?[^#]*)?)(?:#.*)?)");
+
   std::smatch match;
   if (!std::regex_match(url, match, URL_REGEX)) {
     throw std::invalid_argument("Invalid URL");
@@ -102,20 +103,23 @@ URL parseURL(const std::string &url) {
   return {scheme, domain, fs_path};
 }
 
-const static std::unordered_set<char> SAFE_URL_WHITELIST{
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-    'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '_'};
-
 std::string safeURL(const std::string &url) {
   const auto parsed = parseURL(url);
   std::string result = parsed.domain + parsed.path.string();
 
+  const static std::unordered_set<char> WHITELIST{
+      'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+      'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+      'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+      'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+      '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '_'};
+
   for (char &c : result)
-    if (SAFE_URL_WHITELIST.find(c) == SAFE_URL_WHITELIST.end())
+    if (WHITELIST.find(c) == WHITELIST.end())
       c = '_';
+
+  while (result.back() == '_')
+    result.pop_back();
 
   return result;
 }

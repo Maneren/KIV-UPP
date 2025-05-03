@@ -4,11 +4,14 @@
  */
 
 #include <algorithm>
+#include <chrono>
+#include <cstring>
+#include <format>
+#include <fstream>
 #include <iostream>
 #include <list>
 #include <mpi.h>
 #include <ostream>
-#include <queue>
 #include <ranges>
 #include <regex>
 #include <set>
@@ -20,6 +23,8 @@
 #include "utils.h"
 
 namespace ranges = std::ranges;
+namespace views = std::views;
+namespace chrono = std::chrono;
 
 struct HtmlStats {
   std::string path;
@@ -43,13 +48,12 @@ std::ostream &operator<<(std::ostream &os, const HtmlStats &stats) {
   return os;
 }
 
-const static std::regex img_regex(R"(<img\b)");
-const static std::regex form_regex(R"(<form\b)");
-const static std::regex link_regex(R"(<a\b[^>]+href="([^>"]+)\")");
-const static std::regex heading_regex(R"(<h([1-6])>(.*?)</h\1>)");
-
 HtmlStats parseHTML(const utils::URL &url) {
-  std::cout << "Parsing " << url.toString() << std::endl;
+  const static std::regex img_regex(R"(<img\b)");
+  const static std::regex form_regex(R"(<form\b)");
+  const static std::regex link_regex(R"(<a\b[^>]+href="([^>"]+)\")");
+  const static std::regex heading_regex(R"(<h([1-6])>(.*?)</h\1>)");
+
   const auto html = utils::downloadHTML(url.toString());
 
   const size_t images =
@@ -151,6 +155,9 @@ SiteGraph map_site(const utils::URL &start_url) {
   return {nodes, edges, site_stats};
 }
 
+static int rank, total;
+static size_t farmers, workers;
+
 void process(const std::vector<std::string> &URLs, std::string &vystup) {
   std::stringstream oss;
 
@@ -164,31 +171,134 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
 
   vystup = oss.str();
 
-  for (const auto &url : URLs) {
-    const auto graph = map_site(utils::parseURL(url));
+  const static std::regex whitespace(R"(^\s+|\s+$)");
 
-    std::cout << graph << std::endl;
+  const auto clean_urls = URLs | views::transform([](const auto &url) {
+                            return std::regex_replace(url, whitespace, "");
+                          }) |
+                          ranges::to<std::vector>();
 
-    for (const auto &stat : graph.stats) {
-      std::cout << "\"" << stat.first << "\"" << std::endl;
-      std::cout << stat.second << std::endl;
+  const auto folders =
+      clean_urls | views::transform([](const auto &url) {
+        return std::format("./results/{:%Y_%m_%d_%H_%M}_{}",
+                           chrono::utc_clock::now(), utils::safeURL(url));
+      }) |
+      ranges::to<std::vector>();
+
+  static size_t farmer = 1;
+  for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
+
+    if (url.size() >= 1024)
+      throw std::runtime_error("URL too long");
+
+    std::cout << "Sending " << url << " (" << url.size() << " bytes) to farmer "
+              << farmer << " out of " << farmers << std::endl;
+
+    const auto now = chrono::utc_clock::now();
+
+    MPI_Send(url.data(), url.size(), MPI_CHAR, farmer++, 0, MPI_COMM_WORLD);
+    if (farmer > farmers) {
+      farmer = 1;
     }
+
+    std::filesystem::create_directories(folder);
+
+    std::ofstream logfile(folder + "/log.txt");
+    logfile << std::format("{:%Y-%m-%d %H:%M:%S}", now) << std::endl;
+  }
+
+  // Receive results from all farmers
+  for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
+    std::string buffer(1024 * 1024, '\0');
+    MPI_Recv(buffer.data(), buffer.size(), MPI_CHAR, MPI_ANY_SOURCE, 1,
+             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    if (size_t pos = buffer.find_last_not_of('\0'); pos != std::string::npos) {
+      buffer.resize(pos + 1);
+    }
+
+    std::filesystem::create_directories(folder);
+
+    std::cout << "Received " << buffer.size() << " bytes for " << url
+              << std::endl;
+    std::ofstream file(folder + "/map.txt");
+    file << buffer;
+
+    const auto now = chrono::utc_clock::now();
+    std::ofstream logfile(folder + "/log.txt");
+    logfile << std::format("{:%Y-%m-%d %H:%M:%S}", now) << std::endl;
+    logfile << "OK" << std::endl;
   }
 }
 
 int main(int argc, char **argv) {
-  // inicializace serveru
-  CServer svr;
-  if (!svr.Init("./data", "localhost", 8001)) {
-    std::cerr << "Nelze inicializovat server!" << std::endl;
+  if (argc != 5) {
+    std::cerr << "Invalid arguments! " << "Expected 4, but got " << argc
+              << std::endl;
     return EXIT_FAILURE;
   }
 
-  // registrace callbacku pro zpracovani odeslanych URL
-  svr.RegisterFormCallback(process);
+  std::cout << "Starting MPI..." << std::endl;
+  MPI_Init(&argc, &argv);
 
-  // spusteni serveru
-  const auto status = svr.Run() ? EXIT_SUCCESS : EXIT_FAILURE;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &total);
 
-  return status;
+  farmers = std::atol(argv[2]);
+  workers = std::atol(argv[4]);
+
+  std::cout << "Rank " << rank << "/" << total << " online" << std::endl;
+
+  if (rank == 0) {
+    std::cout << "Farmers: " << farmers << std::endl;
+    std::cout << "Workers: " << workers << std::endl;
+  }
+
+  const auto expected = 1 + farmers + farmers * workers;
+
+  if (expected != total) {
+    std::cerr << "Invalid number of processes! Provided " << total
+              << ", but requested " << expected << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  if (rank == 0) {
+    // inicializace serveru
+    CServer svr;
+    if (!svr.Init("./data", "localhost", 8001)) {
+      std::cerr << "Nelze inicializovat server!" << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    // registrace callbacku pro zpracovani odeslanych URL
+    svr.RegisterFormCallback(process);
+
+    // spusteni serveru
+    const auto status = svr.Run() ? EXIT_SUCCESS : EXIT_FAILURE;
+
+    MPI_Finalize();
+
+    return status;
+  } else if (rank > 0 && rank <= farmers) { // Farmer nodes
+    std::string url(1024, '\0');
+    MPI_Recv(url.data(), url.size(), MPI_CHAR, 0, 0, MPI_COMM_WORLD,
+             MPI_STATUS_IGNORE);
+
+    if (size_t pos = url.find_last_not_of('\0'); pos != std::string::npos) {
+      url.resize(pos + 1);
+    }
+
+    const auto graph = map_site(utils::parseURL(url));
+
+    std::stringstream oss;
+    oss << graph;
+    std::string summary = oss.str();
+
+    std::cout << "Summary for " << url << " has " << summary.size() << " bytes"
+              << std::endl;
+
+    MPI_Send(summary.data(), summary.size(), MPI_CHAR, 0, 1, MPI_COMM_WORLD);
+  }
+
+  MPI_Finalize();
 }
