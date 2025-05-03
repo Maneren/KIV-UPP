@@ -74,7 +74,7 @@ HtmlStats parseHTML(const utils::URL &url) {
     headings.emplace_back(std::stoi(match[1]), match[2]);
   }
 
-  return {url.pathToString(), images, forms, links, headings};
+  return {url.path.string(), images, forms, links, headings};
 }
 
 struct SiteGraph {
@@ -107,7 +107,7 @@ SiteGraph map_site(const utils::URL &start_url) {
     const auto url = queue.front();
     queue.pop_front();
 
-    const auto path = url.pathToString();
+    const auto path = url.path.string();
 
     if (visited.find(path) != visited.end()) {
       continue;
@@ -127,17 +127,14 @@ SiteGraph map_site(const utils::URL &start_url) {
       if (link.domain != url.domain)
         continue;
 
-      if (url.path.size() > 1) {
-        link.path.insert(link.path.begin(), url.path.begin(),
-                         url.path.end() - 1);
-      }
+      link.path = (url.path.parent_path() / link.path).lexically_normal();
 
       if (link.path == url.path)
         continue;
 
       queue.push_back(link);
 
-      edge_set.emplace(path, link.pathToString());
+      edge_set.emplace(path, link.path.string());
     }
 
     site_stats.push_back(std::make_pair(path, stats));

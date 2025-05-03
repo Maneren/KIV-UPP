@@ -67,20 +67,7 @@ std::string downloadHTML(const std::string &url) {
 }
 
 std::string URL::toString() const {
-  const auto base = scheme + (scheme.empty() ? "" : "://") + domain;
-  return base + pathToString();
-}
-
-std::string URL::pathToString() const {
-  if (path.empty())
-    return "/";
-
-  std::string base;
-  for (auto &p : path) {
-    base += "/";
-    base += p;
-  }
-  return base;
+  return scheme + (scheme.empty() ? "" : "://") + domain + path.string();
 }
 
 std::vector<std::string> split(const std::string &s, char delim) {
@@ -96,44 +83,23 @@ std::vector<std::string> split(const std::string &s, char delim) {
   return elems;
 }
 
+// https://github.com/yhirose/cpp-httplib/issues/453
+const static std::regex URL_REGEX(
+    R"(^(?:(https?):)?(?://([^:/?#]*)(?::(\d+))?)?([^?#]*(?:\?[^#]*)?)(?:#.*)?)");
+
 URL parseURL(const std::string &url) {
-  std::string scheme;
-  std::string rest;
-
-  // extrahovani schematu a zbytku URL
-  if (url.starts_with("http://")) {
-    scheme = "http";
-    rest = url.substr(7);
-  } else if (url.starts_with("https://")) {
-    scheme = "https";
-    rest = url.substr(8);
-  } else {
-    scheme = "";
-    rest = url;
+  std::smatch match;
+  if (!std::regex_match(url, match, URL_REGEX)) {
+    throw std::invalid_argument("Invalid URL");
   }
 
-  if (rest.ends_with("\r"))
-    rest = rest.substr(0, rest.size() - 1);
+  std::string scheme = match[1];
+  std::string domain = match[2];
+  std::string path = match[4];
 
-  const size_t pos = rest.find("/");
+  std::filesystem::path fs_path{path.empty() ? "/" : path};
 
-  if (pos == std::string::npos) {
-    if (rest.starts_with("/"))
-      rest = rest.substr(1);
-    return {scheme, "", split(rest, '/')};
-  }
-
-  std::string domain = rest.substr(0, pos);
-
-  if (!domain.contains(".")) {
-    if (rest.starts_with("/"))
-      rest = rest.substr(1);
-
-    return {scheme, "", split(rest, '/')};
-  }
-
-  const std::string path = rest.substr(pos + 1);
-  return {scheme, domain, split(path, '/')};
+  return {scheme, domain, fs_path};
 }
 
 std::string safeURL(const std::string &url) {

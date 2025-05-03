@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -23,11 +24,9 @@ std::string downloadHTML(const std::string &url);
 struct URL {
   std::string scheme;
   std::string domain;
-  std::vector<std::string> path;
+  std::filesystem::path path;
 
   std::string toString() const;
-
-  std::string pathToString() const;
 };
 
 // prevede URL do struktury
