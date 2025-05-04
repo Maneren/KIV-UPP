@@ -9,9 +9,9 @@
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <list>
 #include <mpi.h>
 #include <ostream>
+#include <queue>
 #include <ranges>
 #include <regex>
 #include <set>
@@ -51,13 +51,13 @@ std::ostream &operator<<(std::ostream &os, const SiteGraph &graph) {
 
 enum Tags { URL_TAG, TERMINATE_TAG, STATS_TAG, SUMMARY_TAG };
 
-void distribute_work(std::list<utils::URL> &queue,
+void distribute_work(std::queue<utils::URL> &queue,
                      std::set<std::string> &visited, size_t &available_workers,
                      size_t &active_workers, int &current_worker,
                      MPI_Comm comm) {
   while (!queue.empty() && available_workers > 0) {
     utils::URL url = queue.front();
-    queue.pop_front();
+    queue.pop();
 
     const auto path = url.path.string();
 
@@ -87,14 +87,14 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
   std::set<std::string> visited;
   std::set<std::pair<std::string, std::string>> edge_set;
 
-  std::list<utils::URL> queue;
+  std::queue<utils::URL> queue;
 
   std::vector<std::pair<std::string, html::Stats>> site_stats;
 
   const auto &domain = start_url.domain;
   const auto &scheme = start_url.scheme;
 
-  queue.push_back(start_url);
+  queue.push(start_url);
 
   size_t active_workers = 0;
   size_t available_workers = MPIConfig::workers;
@@ -148,7 +148,7 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
       if (link.path == page_path)
         continue;
 
-      queue.push_back(link);
+      queue.push(link);
 
       edge_set.emplace(page_path, link.path.string());
     }
@@ -254,6 +254,18 @@ void farmer(MPI_Comm &worker_comm) {
     int message_size;
 
     MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+    if (status.MPI_TAG == TERMINATE_TAG) {
+      MPI_Recv(nullptr, 0, MPI_CHAR, 0, TERMINATE_TAG, MPI_COMM_WORLD,
+               MPI_STATUS_IGNORE);
+
+      for (int i = 1; i < MPIConfig::workers; i++) {
+        MPI_Send(nullptr, 0, MPI_INT, i, TERMINATE_TAG, worker_comm);
+      }
+
+      break;
+    }
+
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
     url.resize(message_size);
@@ -415,4 +427,6 @@ int main(int argc, char **argv) {
   std::cout << "Process " << MPIConfig::rank << " finished" << std::endl;
 
   MPI_Finalize();
+
+  return EXIT_SUCCESS;
 }
