@@ -3,6 +3,7 @@
  * Soubory a hlavicku upravujte dle sveho uvazeni a nutnosti
  */
 
+#include <algorithm>
 #include <chrono>
 #include <vector>
 #ifdef USE_SSL
@@ -71,21 +72,13 @@ std::string URL::toString() const {
   return scheme + (scheme.empty() ? "" : "://") + domain + path.string();
 }
 
-std::vector<std::string> split(const std::string &s, char delim) {
-  if (s.empty())
-    return {};
-
-  std::vector<std::string> elems;
-  std::stringstream ss(s);
-  std::string item;
-  while (std::getline(ss, item, delim)) {
-    elems.push_back(item);
-  }
-  return elems;
-}
-
 URL parseURL(const std::string &url) {
   // https://github.com/yhirose/cpp-httplib/issues/453
+  // Regex breakdown:
+  // ^(?:(https?):)? - Optional scheme (http or https)
+  // (?://([^:/?#]*)(?::(\d+))?)? - Optional domain and port
+  // ([^?#]*(?:\?[^#]*)?) - Path and optional query
+  // (?:#.*)?$ - Optional fragment
   const static std::regex URL_REGEX(
       R"(^(?:(https?):)?(?://([^:/?#]*)(?::(\d+))?)?([^?#]*(?:\?[^#]*)?)(?:#.*)?)");
 
@@ -98,7 +91,7 @@ URL parseURL(const std::string &url) {
   std::string domain = match[2];
 
   if (std::string port = match[3]; !port.empty()) {
-    domain += port;
+    domain += ":" + port;
   }
 
   std::string path = match[4];
@@ -119,12 +112,17 @@ std::string safeURL(const std::string &url) {
       'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '_'};
 
-  for (char &c : result)
-    if (WHITELIST.find(c) == WHITELIST.end())
-      c = '_';
+  // Use a lambda to check if a character is alphanumeric or in the allowed set
+  const auto isAllowed = [](char c) {
+    return std::isalnum(c) || c == '-' || c == '_';
+  };
 
-  while (result.back() == '_')
-    result.pop_back();
+  // Replace other characters with `_`
+  std::transform(result.begin(), result.end(), result.begin(),
+                 [&](char c) { return isAllowed(c) ? c : '_'; });
+
+  // Remove trailing
+  result.erase(result.find_last_not_of('_') + 1);
 
   return result;
 }

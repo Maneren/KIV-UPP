@@ -6,6 +6,8 @@ SET(CMAKE_CXX_STANDARD 23)
 
 FILE(GLOB_RECURSE src src/*.cpp src/*.h)
 
+ADD_COMPILE_OPTIONS(-g3 -gdwarf-5 -Og -fno-omit-frame-pointer)
+ADD_COMPILE_OPTIONS(-Wall -Wextra -pedantic)
 
 # nastavime, ze nechceme pouzivat SSL ve vychozim stavu - pokud chcete, muzete
 # zapnout, abyste se dostali na https
