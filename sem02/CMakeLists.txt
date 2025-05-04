@@ -7,11 +7,11 @@ SET(CMAKE_CXX_STANDARD 23)
 # Set compiler flags for Debug and RelWithDebInfo builds
 SET(
 	CMAKE_CXX_FLAGS_DEBUG
-	"${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -pedantic -Og -g3 -gdwarf-5 -fno-omit-frame-pointer"
+	"${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -pedantic -g3 -gdwarf-5 -fno-omit-frame-pointer"
 )
 SET(
 	CMAKE_CXX_FLAGS_RELWITHDEBINFO
-	"${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -Og -g3 -gdwarf-5 -fno-omit-frame-pointer"
+	"${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g3 -gdwarf-5 -fno-omit-frame-pointer"
 )
 
 FILE(GLOB_RECURSE src src/*.cpp src/*.h)

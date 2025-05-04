@@ -7,6 +7,7 @@
 namespace html {
 
 std::ostream &operator<<(std::ostream &os, const Stats &stats) {
+  os << stats.path << std::endl;
   os << "IMAGES " << stats.images << std::endl;
   os << "LINKS " << stats.links.size() << std::endl;
   os << "FORMS " << stats.forms << std::endl;

@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 
+#include "data.h"
 #include "html.h"
 #include "serialization.h"
 #include "server.h"
@@ -33,22 +34,6 @@ namespace MPIConfig {
 static int rank, total;
 static int farmers, workers;
 } // namespace MPIConfig
-
-struct SiteGraph {
-  std::vector<std::string> nodes;
-  std::vector<std::pair<std::string, std::string>> edges;
-  std::vector<std::pair<std::string, html::Stats>> stats;
-};
-
-std::ostream &operator<<(std::ostream &os, const SiteGraph &graph) {
-  for (const auto &node : graph.nodes) {
-    os << "\"" << node << "\"\n";
-  }
-  for (const auto &edge : graph.edges) {
-    os << "\"" << edge.first << "\" \"" << edge.second << "\"\n";
-  }
-  return os;
-}
 
 enum Tags { URL_TAG, TERMINATE_TAG, STATS_TAG, SUMMARY_TAG };
 
@@ -90,7 +75,7 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
 
   std::queue<utils::URL> queue;
 
-  std::vector<std::pair<std::string, html::Stats>> site_stats;
+  std::vector<html::Stats> site_stats;
 
   const auto &domain = start_url.domain;
   const auto &scheme = start_url.scheme;
@@ -154,7 +139,7 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
       edge_set.emplace(page_path, link.path.string());
     }
 
-    site_stats.push_back(std::make_pair(page_path, stats));
+    site_stats.emplace_back(stats);
 
     available_workers++;
     active_workers--;
@@ -166,7 +151,7 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
   ranges::sort(nodes);
   ranges::sort(edges);
   ranges::sort(site_stats,
-               [](const auto &a, const auto &b) { return a.first < b.first; });
+               [](const auto &a, const auto &b) { return a.path < b.path; });
 
   return {nodes, edges, site_stats};
 }
@@ -217,7 +202,7 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
   }
 
   // Receive results from all farmers
-  std::string buffer;
+  std::vector<char> buffer;
   for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
     MPI_Status status;
     int message_size;
@@ -229,11 +214,18 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
     MPI_Recv(buffer.data(), buffer.size(), MPI_CHAR, MPI_ANY_SOURCE,
              SUMMARY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    std::cout << "Master received summary of " << url << " (" << buffer.size()
+    std::cout << "Master received graph of " << url << " (" << buffer.size()
               << " bytes)" << std::endl;
 
+    const auto graph = serialization::deserializeSiteGraph(buffer);
+
     std::ofstream file(folder + "/map.txt");
-    file << buffer;
+    file << graph;
+
+    std::ofstream stats_file(folder + "/contents.txt");
+    for (const auto &stats : graph.stats) {
+      stats_file << stats << std::endl;
+    }
 
     const auto now = chrono::utc_clock::now();
     std::ofstream logfile(folder + "/log.txt", std::ofstream::app);
@@ -287,14 +279,12 @@ void farmer(MPI_Comm &worker_comm) {
 
     const auto graph = map_site(utils::parseURL(url), worker_comm);
 
-    std::stringstream oss;
-    oss << graph;
-    std::string summary = oss.str();
+    const auto serialized = serialization::serializeSiteGraph(graph);
 
-    std::cout << "Farmer " << MPIConfig::rank << " summarized " << url << " ("
-              << summary.size() << " bytes)" << std::endl;
+    std::cout << "Farmer " << MPIConfig::rank << " serialized graph for " << url
+              << " (" << serialized.size() << " bytes)" << std::endl;
 
-    MPI_Send(summary.data(), summary.size(), MPI_CHAR, 0, SUMMARY_TAG,
+    MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, SUMMARY_TAG,
              MPI_COMM_WORLD);
 
     url.clear();
