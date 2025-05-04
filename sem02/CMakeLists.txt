@@ -4,10 +4,17 @@ PROJECT(UPP_SP2)
 
 SET(CMAKE_CXX_STANDARD 23)
 
-FILE(GLOB_RECURSE src src/*.cpp src/*.h)
+# Set compiler flags for Debug and RelWithDebInfo builds
+SET(
+	CMAKE_CXX_FLAGS_DEBUG
+	"${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -pedantic -Og -g3 -gdwarf-5 -fno-omit-frame-pointer"
+)
+SET(
+	CMAKE_CXX_FLAGS_RELWITHDEBINFO
+	"${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -Og -g3 -gdwarf-5 -fno-omit-frame-pointer"
+)
 
-ADD_COMPILE_OPTIONS(-g3 -gdwarf-5 -Og -fno-omit-frame-pointer)
-ADD_COMPILE_OPTIONS(-Wall -Wextra -pedantic)
+FILE(GLOB_RECURSE src src/*.cpp src/*.h)
 
 # nastavime, ze nechceme pouzivat SSL ve vychozim stavu - pokud chcete, muzete
 # zapnout, abyste se dostali na https
