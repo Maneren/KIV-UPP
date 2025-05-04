@@ -72,6 +72,10 @@ std::string URL::toString() const {
   return scheme + (scheme.empty() ? "" : "://") + domain + path.string();
 }
 
+std::ostream &operator<<(std::ostream &os, const URL &url) {
+  return os << url.toString();
+}
+
 URL parseURL(const std::string &url) {
   // https://github.com/yhirose/cpp-httplib/issues/453
   // Regex breakdown:
@@ -125,6 +129,11 @@ std::string safeURL(const std::string &url) {
   result.erase(result.find_last_not_of('_') + 1);
 
   return result;
+}
+
+std::string strip(const std::string &s) {
+  static const std::regex whitespace(R"(^\s+|\s+$)");
+  return std::regex_replace(s, whitespace, "");
 }
 
 } // namespace utils

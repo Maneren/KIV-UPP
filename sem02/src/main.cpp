@@ -33,8 +33,6 @@ static int rank, total;
 static int farmers, workers;
 } // namespace MPIConfig
 
-constexpr size_t URL_BUFFER_SIZE = 1024;
-
 struct SiteGraph {
   std::vector<std::string> nodes;
   std::vector<std::pair<std::string, std::string>> edges;
@@ -51,8 +49,39 @@ std::ostream &operator<<(std::ostream &os, const SiteGraph &graph) {
   return os;
 }
 
-enum Tags { URL_TAG, TERMINATE_TAG, STATS_TAG };
-// enum WorkerStatus { URL_RESULT, TERMINATE };
+enum Tags { URL_TAG, TERMINATE_TAG, STATS_TAG, SUMMARY_TAG };
+
+void distribute_work(std::list<utils::URL> &queue,
+                     std::set<std::string> &visited, size_t &available_workers,
+                     size_t &active_workers, int &current_worker,
+                     MPI_Comm comm) {
+  while (!queue.empty() && available_workers > 0) {
+    utils::URL url = queue.front();
+    queue.pop_front();
+
+    const auto path = url.path.string();
+
+    if (visited.find(path) != visited.end()) {
+      continue;
+    } else {
+      visited.insert(path);
+    }
+
+    const auto url_string = url.toString();
+
+    std::cout << "Farmer " << MPIConfig::rank << " sending " << url_string
+              << " to worker " << current_worker << std::endl;
+
+    MPI_Send(url_string.data(), url_string.size(), MPI_CHAR, current_worker,
+             URL_TAG, comm);
+
+    available_workers--;
+    active_workers++;
+
+    if (++current_worker > MPIConfig::workers)
+      current_worker = 1;
+  }
+}
 
 SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
   std::set<std::string> visited;
@@ -71,51 +100,24 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
   size_t available_workers = MPIConfig::workers;
   int current_worker = 1;
 
-  std::vector<char> recv_buffer(1024 * 1024);
+  std::vector<char> recv_buffer;
 
   while (true) {
     // Distribute work to available workers
-    while (!queue.empty() && available_workers > 0) {
-      utils::URL url = queue.front();
-      queue.pop_front();
-
-      const auto path = url.path.string();
-
-      if (visited.find(path) != visited.end()) {
-        continue;
-      } else {
-        visited.insert(path);
-      }
-
-      const auto url_string = url.toString();
-
-      std::cout << "Sending " << url_string << " to worker " << current_worker
-                << " from farmer " << MPIConfig::rank << std::endl;
-
-      MPI_Send(url_string.data(), url_string.size(), MPI_CHAR, current_worker,
-               URL_TAG, comm);
-
-      available_workers--;
-      active_workers++;
-
-      if (++current_worker > MPIConfig::workers)
-        current_worker = 1;
-    }
+    distribute_work(queue, visited, available_workers, active_workers,
+                    current_worker, comm);
 
     // If all work is done, break
     if (queue.empty() && active_workers == 0)
       break;
 
-    // Collect results from workers
     MPI_Status status;
     int message_size;
 
     MPI_Probe(MPI_ANY_SOURCE, STATS_TAG, comm, &status);
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
-    if (message_size > static_cast<int>(recv_buffer.size())) {
-      recv_buffer.resize(message_size);
-    }
+    recv_buffer.resize(message_size);
 
     MPI_Recv(recv_buffer.data(), message_size, MPI_CHAR, status.MPI_SOURCE,
              STATS_TAG, comm, MPI_STATUS_IGNORE);
@@ -183,11 +185,8 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
 
   const static std::regex whitespace(R"(^\s+|\s+$)");
 
-  const auto clean_urls = URLs | views::transform([](const auto &url) {
-                            // Remove leading and trailing whitespace from URLs
-                            return std::regex_replace(url, whitespace, "");
-                          }) |
-                          ranges::to<std::vector>();
+  const auto clean_urls =
+      URLs | views::transform(utils::strip) | ranges::to<std::vector>();
 
   const auto folders =
       clean_urls | views::transform([](const auto &url) {
@@ -199,17 +198,14 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
   static int farmer = 1;
   for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
 
-    if (url.size() >= URL_BUFFER_SIZE)
-      throw std::runtime_error("URL too long");
-
-    std::cout << "Sending " << url << " (" << url.size() << " bytes) to farmer "
-              << farmer << std::endl;
+    std::cout << "Master is sending " << url << " (" << url.size()
+              << " bytes) to farmer " << farmer << std::endl;
 
     const auto now = chrono::utc_clock::now();
 
-    MPI_Send(url.data(), url.size(), MPI_CHAR, farmer++, URL_TAG,
-             MPI_COMM_WORLD);
-    if (farmer > MPIConfig::farmers) {
+    MPI_Send(url.data(), url.size(), MPI_CHAR, farmer, URL_TAG, MPI_COMM_WORLD);
+
+    if (++farmer > MPIConfig::farmers) {
       farmer = 1;
     }
 
@@ -219,18 +215,22 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
     logfile << std::format("{:%Y-%m-%d %H:%M:%S}", now) << std::endl;
   }
 
-  // Receive results from all MPIConfig::MPIConfig::farmers
+  // Receive results from all farmers
+  std::string buffer;
   for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
-    std::string buffer(1024 * 1024, '\0');
-    MPI_Recv(buffer.data(), buffer.size(), MPI_CHAR, MPI_ANY_SOURCE, 1,
-             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Status status;
+    int message_size;
 
-    if (size_t pos = buffer.find_last_not_of('\0'); pos != std::string::npos) {
-      buffer.resize(pos + 1);
-    }
+    MPI_Probe(MPI_ANY_SOURCE, SUMMARY_TAG, MPI_COMM_WORLD, &status);
+    MPI_Get_count(&status, MPI_CHAR, &message_size);
 
-    std::cout << "Received " << buffer.size() << " bytes for " << url
-              << std::endl;
+    buffer.resize(message_size);
+    MPI_Recv(buffer.data(), buffer.size(), MPI_CHAR, MPI_ANY_SOURCE,
+             SUMMARY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    std::cout << "Master received summary of " << url << " (" << buffer.size()
+              << " bytes)" << std::endl;
+
     std::ofstream file(folder + "/map.txt");
     file << buffer;
 
@@ -248,8 +248,15 @@ void farmer(MPI_Comm &worker_comm) {
   std::cout << "Farmer " << MPIConfig::rank << " initialized with color "
             << color << std::endl;
 
-  std::string url(URL_BUFFER_SIZE, '\0');
+  std::string url;
   while (true) {
+    MPI_Status status;
+    int message_size;
+
+    MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+    MPI_Get_count(&status, MPI_CHAR, &message_size);
+
+    url.resize(message_size);
     MPI_Recv(url.data(), url.size(), MPI_CHAR, 0, URL_TAG, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
 
@@ -257,23 +264,22 @@ void farmer(MPI_Comm &worker_comm) {
       url.resize(pos + 1);
     }
 
-    std::cout << "Processing " << url << std::endl;
+    std::cout << "Farmer " << MPIConfig::rank << " is processing " << url
+              << std::endl;
 
     const auto graph = map_site(utils::parseURL(url), worker_comm);
-
-    std::cout << "Farmer mapped " << url << std::endl;
 
     std::stringstream oss;
     oss << graph;
     std::string summary = oss.str();
 
-    std::cout << "Summary for " << url << " has " << summary.size() << " bytes"
-              << std::endl;
+    std::cout << "Farmer " << MPIConfig::rank << " summarized " << url << " ("
+              << summary.size() << " bytes)" << std::endl;
 
-    MPI_Send(summary.data(), summary.size(), MPI_CHAR, 0, 1, MPI_COMM_WORLD);
+    MPI_Send(summary.data(), summary.size(), MPI_CHAR, 0, SUMMARY_TAG,
+             MPI_COMM_WORLD);
 
     url.clear();
-    url.resize(URL_BUFFER_SIZE, '\0');
   }
 }
 
@@ -288,18 +294,12 @@ void worker(MPI_Comm &farmer_comm) {
   std::cout << "Worker " << MPIConfig::rank << " initialized with color "
             << color << " and rank " << comm_rank << std::endl;
 
+  std::string buffer;
   while (true) {
     MPI_Status status;
-    std::cout << "Worker " << MPIConfig::rank << " waiting for message"
-              << std::endl;
-
     MPI_Probe(0, MPI_ANY_TAG, farmer_comm, &status);
 
-    std::cout << "Worker " << MPIConfig::rank << " received message with tag "
-              << status.MPI_TAG << std::endl;
-
     if (status.MPI_TAG == TERMINATE_TAG) {
-
       MPI_Recv(nullptr, 0, MPI_CHAR, 0, TERMINATE_TAG, farmer_comm,
                MPI_STATUS_IGNORE);
       std::cout << "Worker " << MPIConfig::rank
@@ -308,35 +308,30 @@ void worker(MPI_Comm &farmer_comm) {
       break;
     }
 
-    int messageSize;
-    MPI_Get_count(&status, MPI_CHAR, &messageSize);
+    int message_size;
+    MPI_Get_count(&status, MPI_CHAR, &message_size);
 
-    std::vector<char> buffer(messageSize);
-    MPI_Recv(buffer.data(), messageSize, MPI_CHAR, 0, URL_TAG, farmer_comm,
+    buffer.resize(message_size);
+    MPI_Recv(buffer.data(), message_size, MPI_CHAR, 0, URL_TAG, farmer_comm,
              MPI_STATUS_IGNORE);
 
-    const std::string url_str(buffer.begin(), buffer.end());
+    std::cout << "Worker " << MPIConfig::rank << " received " << buffer << " ("
+              << buffer.size() << " bytes)" << std::endl;
 
-    std::cout << "Worker " << MPIConfig::rank << " received " << url_str << " ("
-              << url_str.size() << " bytes)" << std::endl;
+    const auto url = utils::parseURL(buffer);
 
-    const auto url = utils::parseURL(url_str);
-
-    // Parse HTML and extract stats
     const auto stats = html::parse(url);
 
-    std::cout << "Worker " << MPIConfig::rank << " parsed stats for " << url_str
-              << std::endl;
-
     // Send results back to farmer
-    const auto serializedStats = serialization::serializeHtmlStats(stats);
+    const auto serialized = serialization::serializeHtmlStats(stats);
 
-    std::cout << "Worker " << MPIConfig::rank << " serialized stats for "
-              << url_str << " (" << serializedStats.size() << " bytes)"
-              << std::endl;
+    std::cout << "Worker " << MPIConfig::rank << " parsed stats for " << buffer
+              << " (" << serialized.size() << " bytes)" << std::endl;
 
-    MPI_Send(serializedStats.data(), serializedStats.size(), MPI_CHAR, 0,
-             STATS_TAG, farmer_comm);
+    MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, STATS_TAG,
+             farmer_comm);
+
+    buffer.clear();
   }
 }
 
@@ -359,6 +354,11 @@ int main(int argc, char **argv) {
   std::cout << "Rank " << MPIConfig::rank << "/" << MPIConfig::total
             << " online" << std::endl;
 
+  if (MPIConfig::farmers == 0 || MPIConfig::workers == 0) {
+    std::cerr << "Number of farmers and workers can't be zero!" << std::endl;
+    return EXIT_FAILURE;
+  }
+
   MPI_Barrier(MPI_COMM_WORLD);
 
   if (MPIConfig::rank == 0) {
@@ -366,11 +366,6 @@ int main(int argc, char **argv) {
     std::cout << "Workers: " << MPIConfig::workers << " per farmer ("
               << MPIConfig::farmers * MPIConfig::workers << " in total)"
               << std::endl;
-  }
-
-  if (MPIConfig::farmers == 0 || MPIConfig::workers == 0) {
-    std::cerr << "Number of farmers and workers can't be zero!" << std::endl;
-    return EXIT_FAILURE;
   }
 
   const auto expected =

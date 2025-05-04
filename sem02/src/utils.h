@@ -6,6 +6,7 @@
 #pragma once
 
 #include <filesystem>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,8 @@ struct URL {
   std::string toString() const;
 };
 
+std::ostream &operator<<(std::ostream &os, const URL &url);
+
 // prevede URL do struktury
 URL parseURL(const std::string &url);
 
@@ -36,4 +39,7 @@ URL parseURL(const std::string &url);
 // url - nebezpeceny URL
 // vraci string, kde jsou nebezpecene znaky nahrazeny podtrzitky
 std::string safeURL(const std::string &url);
+
+// odstrani pocatecni a koncove bile znaky
+std::string strip(const std::string &s);
 } // namespace utils
