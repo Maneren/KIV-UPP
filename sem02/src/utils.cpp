@@ -96,6 +96,11 @@ URL parseURL(const std::string &url) {
 
   std::string scheme = match[1];
   std::string domain = match[2];
+
+  if (std::string port = match[3]; !port.empty()) {
+    domain += port;
+  }
+
   std::string path = match[4];
 
   std::filesystem::path fs_path{path.empty() ? "/" : path};
