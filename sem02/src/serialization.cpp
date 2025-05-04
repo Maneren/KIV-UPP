@@ -1,84 +1,74 @@
 #include "serialization.h"
 #include <cstring>
+#include <vector>
 
 namespace serialization {
 // Convert HtmlStats to a message that can be sent over MPI
 std::vector<char> serializeHtmlStats(const html::Stats &stats) {
-  std::vector<char> buffer;
-
   // Calculate total size upfront
-  size_t total_size = sizeof(size_t) + stats.path.string().size() +
-                      2 * sizeof(size_t) + sizeof(size_t) +
-                      stats.links.size() * sizeof(size_t) + sizeof(size_t) +
-                      stats.headings.size() * (sizeof(size_t) + sizeof(size_t));
+  size_t total_size =
+      sizeof(size_t) +                            // path size
+      stats.path.string().size() +                // path
+      2 * sizeof(size_t) +                        // images and forms counts
+      sizeof(size_t) +                            // links count
+      stats.links.size() * sizeof(size_t) +       // links sizes
+      sizeof(size_t) +                            // headings count
+      stats.headings.size() * 2 * sizeof(size_t); // headings sizes and levels
+
+  // stringified links
+  std::vector<std::string> links;
 
   for (const auto &url : stats.links) {
-    total_size += url.toString().size();
+    links.emplace_back(url.toString());
+    total_size += links.back().size();
   }
 
   for (const auto &[level, heading] : stats.headings) {
     total_size += heading.size();
   }
 
-  buffer.reserve(total_size);
+  std::vector<char> buffer(total_size);
+
+  char *ptr = buffer.data();
+  const auto write = [&ptr](const void *src, size_t n) {
+    std::memcpy(ptr, src, n);
+    ptr += n;
+  };
 
   // Add path
   const auto path = stats.path.string();
-  const size_t pathLen = path.size();
-  buffer.resize(sizeof(size_t) + pathLen);
-  std::memcpy(buffer.data(), &pathLen, sizeof(size_t));
-  std::memcpy(buffer.data() + sizeof(size_t), path.data(), path.size());
+  const size_t path_length = path.size();
+
+  write(&path_length, sizeof(size_t));
+  write(path.data(), path.size());
 
   // Add counts
-  size_t offset = buffer.size();
-  buffer.resize(offset + 2 * sizeof(size_t));
-  std::memcpy(buffer.data() + offset, &stats.images, sizeof(size_t));
-  std::memcpy(buffer.data() + offset + sizeof(size_t), &stats.forms,
-              sizeof(size_t));
-  offset += 2 * sizeof(size_t);
+  write(&stats.images, sizeof(size_t));
+  write(&stats.forms, sizeof(size_t));
 
   // Add links
   // link_count, link_1_len, link_1, link_2_len, link_2, ...
-  size_t linksOffset = buffer.size();
-  size_t link_count = stats.links.size();
-  buffer.resize(linksOffset + sizeof(size_t));
-  std::memcpy(buffer.data() + linksOffset, &link_count, sizeof(size_t));
+  const size_t link_count = stats.links.size();
+  write(&link_count, sizeof(size_t));
 
-  for (const auto &url : stats.links) {
-    const auto link = url.toString();
+  for (const auto &link : links) {
     const auto linkLen = link.size();
 
-    auto offset = buffer.size();
-    buffer.resize(offset + sizeof(size_t) + linkLen);
-
-    std::memcpy(buffer.data() + offset, &linkLen, sizeof(size_t));
-    offset += sizeof(size_t);
-
-    std::memcpy(buffer.data() + offset, link.data(), linkLen);
-    offset += linkLen;
+    write(&linkLen, sizeof(size_t));
+    write(link.data(), linkLen);
   }
 
   // Add headings
   // heading_count, heading_1_len, heading_1, heading_2_len, heading_2, ...
-  size_t headingsOffset = buffer.size();
   size_t heading_count = stats.headings.size();
-  buffer.resize(headingsOffset + sizeof(size_t));
-  std::memcpy(buffer.data() + headingsOffset, &heading_count, sizeof(size_t));
+  write(&heading_count, sizeof(size_t));
 
   for (const auto &[level, heading] : stats.headings) {
     const auto length = heading.size();
 
-    auto offset = buffer.size();
-    buffer.resize(offset + sizeof(size_t) + sizeof(level) + length);
-
-    std::memcpy(buffer.data() + offset, &length, sizeof(size_t));
-    offset += sizeof(size_t);
-
-    std::memcpy(buffer.data() + offset, &level, sizeof(level));
-    offset += sizeof(level);
-
-    std::memcpy(buffer.data() + offset, heading.data(), length);
-    offset += length;
+    write(&length, sizeof(size_t));
+    write(&level, sizeof(level));
+    write(heading.data(), length);
   }
 
   return buffer;
@@ -87,56 +77,53 @@ std::vector<char> serializeHtmlStats(const html::Stats &stats) {
 // Deserialize message back to HtmlStats
 html::Stats deserializeHtmlStats(const std::vector<char> &buffer) {
   html::Stats stats;
-  size_t offset = 0;
+
+  char const *ptr = buffer.data();
+  const auto read = [&ptr](void *dest, size_t n) {
+    std::memcpy(dest, ptr, n);
+    ptr += n;
+  };
 
   // Extract path
-  size_t pathLen;
-  std::memcpy(&pathLen, buffer.data() + offset, sizeof(size_t));
-  offset += sizeof(size_t);
+  size_t path_len;
+  read(&path_len, sizeof(size_t));
 
-  std::string path(buffer.data() + offset, buffer.data() + offset + pathLen);
-  stats.path = path;
-  offset += pathLen;
+  stats.path = std::string(ptr, ptr + path_len);
+  ptr += path_len;
 
   // Extract counts
-  std::memcpy(&stats.images, buffer.data() + offset, sizeof(size_t));
-  offset += sizeof(size_t);
-  std::memcpy(&stats.forms, buffer.data() + offset, sizeof(size_t));
-  offset += sizeof(size_t);
+  read(&stats.images, sizeof(size_t));
+  read(&stats.forms, sizeof(size_t));
 
   // Extract links
   size_t link_count;
-  std::memcpy(&link_count, buffer.data() + offset, sizeof(size_t));
-  offset += sizeof(size_t);
+  read(&link_count, sizeof(size_t));
 
   for (size_t i = 0; i < link_count; i++) {
-    size_t linkLen;
-    std::memcpy(&linkLen, buffer.data() + offset, sizeof(size_t));
-    offset += sizeof(size_t);
+    size_t length;
+    read(&length, sizeof(size_t));
 
-    std::string link(buffer.data() + offset, buffer.data() + offset + linkLen);
+    std::string link(ptr, ptr + length);
+    ptr += length;
+
     stats.links.push_back(utils::parseURL(link));
-    offset += linkLen;
   }
 
   // Extract headings
   size_t heading_count;
-  std::memcpy(&heading_count, buffer.data() + offset, sizeof(size_t));
-  offset += sizeof(size_t);
+  read(&heading_count, sizeof(size_t));
 
   for (size_t i = 0; i < heading_count; i++) {
-    size_t headingLen;
-    std::memcpy(&headingLen, buffer.data() + offset, sizeof(size_t));
-    offset += sizeof(size_t);
+    size_t length;
+    read(&length, sizeof(size_t));
 
     size_t level;
-    std::memcpy(&level, buffer.data() + offset, sizeof(size_t));
-    offset += sizeof(size_t);
+    read(&level, sizeof(size_t));
 
-    std::string heading(buffer.data() + offset,
-                        buffer.data() + offset + headingLen);
+    std::string heading(ptr, ptr + length);
+    ptr += length;
+
     stats.headings.emplace_back(level, heading);
-    offset += headingLen;
   }
 
   return stats;
