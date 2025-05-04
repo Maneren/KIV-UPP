@@ -17,6 +17,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "html.h"
@@ -252,8 +253,13 @@ void farmer(MPI_Comm &worker_comm) {
   while (true) {
     MPI_Status status;
     int message_size;
+    int message_available = 0;
 
-    MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+    MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &message_available, &status);
+    if (!message_available) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
+    }
 
     if (status.MPI_TAG == TERMINATE_TAG) {
       MPI_Recv(nullptr, 0, MPI_CHAR, 0, TERMINATE_TAG, MPI_COMM_WORLD,
@@ -309,7 +315,13 @@ void worker(MPI_Comm &farmer_comm) {
   std::string buffer;
   while (true) {
     MPI_Status status;
-    MPI_Probe(0, MPI_ANY_TAG, farmer_comm, &status);
+    int message_available = 0;
+
+    MPI_Iprobe(0, MPI_ANY_TAG, farmer_comm, &message_available, &status);
+    if (!message_available) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
+    }
 
     if (status.MPI_TAG == TERMINATE_TAG) {
       MPI_Recv(nullptr, 0, MPI_CHAR, 0, TERMINATE_TAG, farmer_comm,
