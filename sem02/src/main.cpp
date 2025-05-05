@@ -234,6 +234,31 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
   }
 }
 
+int master(MPI_Comm &farmer_worker_comm) {
+  // only to synchronize, we don't use this in master
+  MPI_Comm_split(MPI_COMM_WORLD, 0, 0, &farmer_worker_comm);
+
+  // inicializace serveru
+  CServer svr;
+  if (!svr.Init("./data", "localhost", 8001)) {
+    std::cerr << "Nelze inicializovat server!" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  // registrace callbacku pro zpracovani odeslanych URL
+  svr.RegisterFormCallback(process);
+
+  // spusteni serveru
+  const auto status = svr.Run() ? EXIT_SUCCESS : EXIT_FAILURE;
+
+  // Send termination signal to all workers
+  for (int i = 1; i < MPIConfig::total; i++) {
+    MPI_Send(nullptr, 0, MPI_INT, i, TERMINATE_TAG, MPI_COMM_WORLD);
+  }
+
+  return status;
+}
+
 void farmer(MPI_Comm &worker_comm) {
   int color = MPIConfig::rank;
   MPI_Comm_split(MPI_COMM_WORLD, color, 0, &worker_comm);
@@ -394,26 +419,7 @@ int main(int argc, char **argv) {
   MPI_Comm farmer_worker_comm;
 
   if (MPIConfig::rank == 0) {
-    // only to synchronize, we don't use this in master
-    MPI_Comm_split(MPI_COMM_WORLD, 0, 0, &farmer_worker_comm);
-
-    // inicializace serveru
-    CServer svr;
-    if (!svr.Init("./data", "localhost", 8001)) {
-      std::cerr << "Nelze inicializovat server!" << std::endl;
-      return EXIT_FAILURE;
-    }
-
-    // registrace callbacku pro zpracovani odeslanych URL
-    svr.RegisterFormCallback(process);
-
-    // spusteni serveru
-    const auto status = svr.Run() ? EXIT_SUCCESS : EXIT_FAILURE;
-
-    // Send termination signal to all workers
-    for (int i = 1; i < MPIConfig::total; i++) {
-      MPI_Send(nullptr, 0, MPI_INT, i, TERMINATE_TAG, MPI_COMM_WORLD);
-    }
+    const auto status = master(farmer_worker_comm);
 
     MPI_Finalize();
 
