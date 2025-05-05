@@ -13,7 +13,6 @@
 #include <ostream>
 #include <queue>
 #include <ranges>
-#include <regex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -35,23 +34,27 @@ static int rank, total;
 static int farmers, workers;
 } // namespace MPIConfig
 
+constexpr auto WAIT_TIME = std::chrono::milliseconds(10);
+
 enum Tags { URL_TAG, TERMINATE_TAG, STATS_TAG, SUMMARY_TAG };
 
-void distribute_work(std::queue<utils::URL> &queue,
-                     std::set<std::string> &visited, size_t &available_workers,
-                     size_t &active_workers, int &current_worker,
-                     MPI_Comm comm) {
-  while (!queue.empty() && available_workers > 0) {
-    utils::URL url = queue.front();
+bool distribute_work(std::queue<utils::URL> &queue,
+                     std::set<std::string> &visited, int &active_workers,
+                     int &current_worker, MPI_Comm &comm) {
+  bool success = false;
+
+  while (!queue.empty() && active_workers < MPIConfig::workers) {
+    const utils::URL url = queue.front();
     queue.pop();
 
     const auto path = url.path.string();
 
     if (visited.find(path) != visited.end()) {
       continue;
-    } else {
-      visited.insert(path);
     }
+
+    visited.insert(path);
+    success = true;
 
     const auto url_string = url.toString();
 
@@ -61,41 +64,43 @@ void distribute_work(std::queue<utils::URL> &queue,
     MPI_Send(url_string.data(), url_string.size(), MPI_CHAR, current_worker,
              URL_TAG, comm);
 
-    available_workers--;
     active_workers++;
 
     if (++current_worker > MPIConfig::workers)
       current_worker = 1;
   }
+
+  return success;
 }
 
 SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
+  // ordered sets are used, because we would sort the resulting vectors anyways
   std::set<std::string> visited;
   std::set<std::pair<std::string, std::string>> edge_set;
 
   std::queue<utils::URL> queue;
 
-  std::vector<html::Stats> site_stats;
+  struct stats_less {
+    bool operator()(const html::Stats &a, const html::Stats &b) const {
+      return a.path < b.path;
+    };
+  };
+
+  std::set<html::Stats, stats_less> stats_set;
 
   const auto &domain = start_url.domain;
   const auto &scheme = start_url.scheme;
 
   queue.push(start_url);
 
-  size_t active_workers = 0;
-  size_t available_workers = MPIConfig::workers;
+  int active_workers = 0;
   int current_worker = 1;
 
   std::vector<char> recv_buffer;
 
-  while (true) {
-    // Distribute work to available workers
-    distribute_work(queue, visited, available_workers, active_workers,
-                    current_worker, comm);
-
-    // If all work is done, break
-    if (queue.empty() && active_workers == 0)
-      break;
+  while (
+      distribute_work(queue, visited, active_workers, current_worker, comm) ||
+      active_workers > 0) {
 
     MPI_Status status;
     int message_size;
@@ -114,9 +119,8 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
               << stats.path << " (" << recv_buffer.size() << " bytes)"
               << std::endl;
 
-    recv_buffer.clear();
-
     const auto &page_path = stats.path;
+    const auto page_parent = page_path.parent_path();
 
     // Add new links to the queue
     for (auto &link : stats.links) {
@@ -125,11 +129,10 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
 
       if (link.domain.empty())
         link.domain = domain;
-
-      if (link.domain != domain)
+      else if (link.domain != domain)
         continue;
 
-      link.path = (page_path.parent_path() / link.path).lexically_normal();
+      link.path = (page_parent / link.path).lexically_normal();
 
       if (link.path == page_path)
         continue;
@@ -139,21 +142,16 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
       edge_set.emplace(page_path, link.path.string());
     }
 
-    site_stats.emplace_back(stats);
+    stats_set.emplace(stats);
 
-    available_workers++;
     active_workers--;
   }
 
   std::vector nodes(visited.begin(), visited.end());
   std::vector edges(edge_set.begin(), edge_set.end());
+  std::vector stats(stats_set.begin(), stats_set.end());
 
-  ranges::sort(nodes);
-  ranges::sort(edges);
-  ranges::sort(site_stats,
-               [](const auto &a, const auto &b) { return a.path < b.path; });
-
-  return {nodes, edges, site_stats};
+  return {nodes, edges, stats};
 }
 
 void process(const std::vector<std::string> &URLs, std::string &vystup) {
@@ -168,8 +166,6 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
   oss << "</ul>";
 
   vystup = oss.str();
-
-  const static std::regex whitespace(R"(^\s+|\s+$)");
 
   const auto clean_urls =
       URLs | views::transform(utils::strip) | ranges::to<std::vector>();
@@ -274,7 +270,7 @@ void farmer(MPI_Comm &worker_comm) {
 
     MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &message_available, &status);
     if (!message_available) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(WAIT_TIME);
       continue;
     }
 
@@ -295,10 +291,6 @@ void farmer(MPI_Comm &worker_comm) {
     MPI_Recv(url.data(), url.size(), MPI_CHAR, 0, URL_TAG, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
 
-    if (size_t pos = url.find_last_not_of('\0'); pos != std::string::npos) {
-      url.resize(pos + 1);
-    }
-
     std::cout << "Farmer " << MPIConfig::rank << " is processing " << url
               << std::endl;
 
@@ -311,8 +303,6 @@ void farmer(MPI_Comm &worker_comm) {
 
     MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, SUMMARY_TAG,
              MPI_COMM_WORLD);
-
-    url.clear();
   }
 }
 
@@ -334,7 +324,7 @@ void worker(MPI_Comm &farmer_comm) {
 
     MPI_Iprobe(0, MPI_ANY_TAG, farmer_comm, &message_available, &status);
     if (!message_available) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(WAIT_TIME);
       continue;
     }
 
@@ -369,8 +359,6 @@ void worker(MPI_Comm &farmer_comm) {
 
     MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, STATS_TAG,
              farmer_comm);
-
-    buffer.clear();
   }
 }
 
@@ -416,6 +404,11 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
+  // Farmer-worker communicator
+  // Color 0 is reserved for master and not used otherwise
+  // Color 1 is farmer 1 and his workers
+  // Color 2 is farmer 2 and his workers
+  // etc.
   MPI_Comm farmer_worker_comm;
 
   if (MPIConfig::rank == 0) {
