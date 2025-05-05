@@ -17,7 +17,7 @@ build:
     cmake --build {{ builddir }}
 
 sample: build
-    mpirun -n 2 --host hydra-1,hydra-2 {{ builddir }}/UPP-SP2
+    mpirun -np 11 --oversubscribe {{ builddir }}/UPP-SP2 -n 2 -m 4
 
 clean:
     rm -rf build
