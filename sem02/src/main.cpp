@@ -293,7 +293,7 @@ void farmer(MPI_Comm &worker_comm) {
 
 void worker(MPI_Comm &farmer_comm) {
   int color =
-      (MPIConfig::rank - 1 - MPIConfig::farmers) / MPIConfig::farmers + 1;
+      (MPIConfig::rank - 1 - MPIConfig::farmers) / MPIConfig::workers + 1;
   MPI_Comm_split(MPI_COMM_WORLD, color, MPIConfig::rank, &farmer_comm);
 
   int comm_rank;
