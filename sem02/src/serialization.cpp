@@ -245,8 +245,6 @@ SiteGraph deserializeSiteGraph(const std::vector<char> &buffer) {
     graph.edges.emplace_back(std::move(first), std::move(second));
   }
 
-  // std::subtract_with_carry_engine<size_t, 32, 2, 4> rng;
-
   // Extract stats
   size_t stats_count;
   read(&stats_count, sizeof(stats_count));
