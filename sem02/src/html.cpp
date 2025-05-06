@@ -38,7 +38,18 @@ Stats parse(const utils::URL &url) {
   for (std::sregex_iterator it(html.begin(), html.end(), link_regex), end_it;
        it != end_it; ++it) {
     std::smatch match = *it;
-    links.push_back(utils::parseURL(match[1]));
+    const auto link_url = utils::parseURL(match[1]);
+
+    if (link_url.path.empty()) {
+      continue;
+    }
+
+    if ((!link_url.scheme.empty() && link_url.scheme != url.scheme) ||
+        (!link_url.domain.empty() && link_url.domain != url.domain)) {
+      continue;
+    }
+
+    links.push_back(link_url);
   }
 
   std::vector<std::pair<size_t, std::string>> headings;

@@ -13,18 +13,40 @@ std::vector<char> serializeHtmlStats(const html::Stats &stats) {
       sizeof(size_t) +                            // path size
       stats.path.string().size() +                // path
       2 * sizeof(size_t) +                        // images and forms counts
+      sizeof(size_t) +                            // scheme size
+      sizeof(size_t) +                            // domain size
       sizeof(size_t) +                            // links count
       stats.links.size() * sizeof(size_t) +       // links sizes
       sizeof(size_t) +                            // headings count
       stats.headings.size() * 2 * sizeof(size_t); // headings sizes and levels
 
-  // stringified links
+  // send scheme and domain only once, rather than for each link
+  std::string scheme;
+  std::string domain;
+
+  // stringified link paths
   std::vector<std::string> links;
 
   for (const auto &url : stats.links) {
-    links.emplace_back(url.toString());
+    if (scheme.empty()) {
+      scheme = url.scheme;
+    } else if (url.scheme != scheme) {
+      throw std::invalid_argument(
+          "All urls in HtmlStats must have the same scheme");
+    }
+
+    if (domain.empty()) {
+      domain = url.domain;
+    } else if (url.domain != domain) {
+      throw std::invalid_argument(
+          "All urls in HtmlStats must have the same domain");
+    }
+
+    links.emplace_back(url.path.string());
     total_size += links.back().size();
   }
+
+  total_size += domain.size() + scheme.size();
 
   for (const auto &[_, heading] : stats.headings) {
     total_size += heading.size();
@@ -48,6 +70,14 @@ std::vector<char> serializeHtmlStats(const html::Stats &stats) {
   // Add counts
   write(&stats.images, sizeof(stats.images));
   write(&stats.forms, sizeof(stats.forms));
+
+  // Add scheme and domain
+  const auto scheme_length = scheme.size();
+  const auto domain_length = domain.size();
+  write(&scheme_length, sizeof(scheme_length));
+  write(scheme.data(), scheme_length);
+  write(&domain_length, sizeof(domain_length));
+  write(domain.data(), domain_length);
 
   // Add links
   // link_count, link_1_len, link_1, link_2_len, link_2, ...
@@ -98,6 +128,19 @@ html::Stats deserializeHtmlStats(const std::vector<char> &buffer) {
   read(&stats.images, sizeof(stats.images));
   read(&stats.forms, sizeof(stats.images));
 
+  // Extract scheme and domain
+  size_t scheme_len;
+  read(&scheme_len, sizeof(scheme_len));
+
+  std::string scheme(ptr, ptr + scheme_len);
+  ptr += scheme_len;
+
+  size_t domain_len;
+  read(&domain_len, sizeof(domain_len));
+
+  std::string domain(ptr, ptr + domain_len);
+  ptr += domain_len;
+
   // Extract links
   size_t link_count;
   read(&link_count, sizeof(link_count));
@@ -110,6 +153,10 @@ html::Stats deserializeHtmlStats(const std::vector<char> &buffer) {
     ptr += length;
 
     stats.links.push_back(utils::parseURL(link));
+
+    auto &url = stats.links.back();
+    url.scheme = scheme;
+    url.domain = domain;
   }
 
   // Extract headings
