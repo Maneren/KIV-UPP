@@ -113,42 +113,42 @@ html::Stats deserializeHtmlStats(const std::vector<char> &buffer) {
   html::Stats stats;
 
   char const *ptr = buffer.data();
-  const auto read = [&ptr](void *dest, size_t n) {
-    std::memcpy(dest, ptr, n);
-    ptr += n;
+  const auto read = [&ptr]<typename T>(T *dest) {
+    std::memcpy(dest, ptr, sizeof(T));
+    ptr += sizeof(T);
   };
 
   // Extract path
   size_t path_len;
-  read(&path_len, sizeof(path_len));
+  read(&path_len);
 
   stats.path = std::string(ptr, ptr + path_len);
   ptr += path_len;
 
   // Extract counts
-  read(&stats.images, sizeof(stats.images));
-  read(&stats.forms, sizeof(stats.images));
+  read(&stats.images);
+  read(&stats.forms);
 
   // Extract scheme and domain
   size_t scheme_len;
-  read(&scheme_len, sizeof(scheme_len));
+  read(&scheme_len);
 
   std::string scheme(ptr, ptr + scheme_len);
   ptr += scheme_len;
 
   size_t domain_len;
-  read(&domain_len, sizeof(domain_len));
+  read(&domain_len);
 
   std::string domain(ptr, ptr + domain_len);
   ptr += domain_len;
 
   // Extract links
   size_t link_count;
-  read(&link_count, sizeof(link_count));
+  read(&link_count);
 
   for (size_t i = 0; i < link_count; i++) {
     size_t length;
-    read(&length, sizeof(length));
+    read(&length);
 
     std::string link(ptr, ptr + length);
     ptr += length;
@@ -162,14 +162,14 @@ html::Stats deserializeHtmlStats(const std::vector<char> &buffer) {
 
   // Extract headings
   size_t heading_count;
-  read(&heading_count, sizeof(heading_count));
+  read(&heading_count);
 
   for (size_t i = 0; i < heading_count; i++) {
     size_t length;
-    read(&length, sizeof(length));
+    read(&length);
 
     unsigned char level;
-    read(&level, sizeof(level));
+    read(&level);
 
     std::string heading(ptr, ptr + length);
     ptr += length;
@@ -253,18 +253,18 @@ SiteGraph deserializeSiteGraph(const std::vector<char> &buffer) {
   SiteGraph graph;
 
   char const *ptr = buffer.data();
-  const auto read = [&ptr](void *dest, size_t n) {
-    std::memcpy(dest, ptr, n);
-    ptr += n;
+  const auto read = [&ptr]<typename T>(T *dest) {
+    std::memcpy(dest, ptr, sizeof(T));
+    ptr += sizeof(T);
   };
 
   // Extract nodes
   size_t nodes_count;
-  read(&nodes_count, sizeof(size_t));
+  read(&nodes_count);
 
   for (size_t i = 0; i < nodes_count; i++) {
     size_t length;
-    read(&length, sizeof(length));
+    read(&length);
 
     graph.nodes.emplace_back(ptr, ptr + length);
     ptr += length;
@@ -272,14 +272,14 @@ SiteGraph deserializeSiteGraph(const std::vector<char> &buffer) {
 
   // Extract edges
   size_t edges_count;
-  read(&edges_count, sizeof(edges_count));
+  read(&edges_count);
 
   for (size_t i = 0; i < edges_count; i++) {
     size_t first_index;
-    read(&first_index, sizeof(first_index));
+    read(&first_index);
 
     size_t second_index;
-    read(&second_index, sizeof(second_index));
+    read(&second_index);
 
     graph.edges.emplace_back(graph.nodes[first_index],
                              graph.nodes[second_index]);
@@ -287,11 +287,11 @@ SiteGraph deserializeSiteGraph(const std::vector<char> &buffer) {
 
   // Extract stats
   size_t stats_count;
-  read(&stats_count, sizeof(stats_count));
+  read(&stats_count);
 
   for (size_t i = 0; i < stats_count; i++) {
     size_t stats_length;
-    read(&stats_length, sizeof(stats_length));
+    read(&stats_length);
 
     std::vector<char> stats_buffer(ptr, ptr + stats_length);
     ptr += stats_length;
