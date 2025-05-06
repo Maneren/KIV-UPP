@@ -52,7 +52,7 @@ Stats parse(const utils::URL &url) {
     links.push_back(link_url);
   }
 
-  std::vector<std::pair<size_t, std::string>> headings;
+  std::vector<std::pair<unsigned char, std::string>> headings;
   for (std::sregex_iterator it(html.begin(), html.end(), heading_regex), end_it;
        it != end_it; ++it) {
     std::smatch match = *it;

@@ -11,7 +11,7 @@ struct Stats {
   size_t images;
   size_t forms;
   std::vector<utils::URL> links;
-  std::vector<std::pair<size_t, std::string>> headings;
+  std::vector<std::pair<unsigned char, std::string>> headings;
 };
 
 std::ostream &operator<<(std::ostream &os, const Stats &stats);

@@ -10,15 +10,16 @@ namespace serialization {
 std::vector<char> serializeHtmlStats(const html::Stats &stats) {
   // Calculate total size upfront
   auto total_size =
-      sizeof(size_t) +                            // path size
-      stats.path.string().size() +                // path
-      2 * sizeof(size_t) +                        // images and forms counts
-      sizeof(size_t) +                            // scheme size
-      sizeof(size_t) +                            // domain size
-      sizeof(size_t) +                            // links count
-      stats.links.size() * sizeof(size_t) +       // links sizes
-      sizeof(size_t) +                            // headings count
-      stats.headings.size() * 2 * sizeof(size_t); // headings sizes and levels
+      sizeof(size_t) +                      // path size
+      stats.path.string().size() +          // path
+      2 * sizeof(size_t) +                  // images and forms counts
+      sizeof(size_t) +                      // scheme size
+      sizeof(size_t) +                      // domain size
+      sizeof(size_t) +                      // links count
+      stats.links.size() * sizeof(size_t) + // links sizes
+      sizeof(size_t) +                      // headings count
+      stats.headings.size() *
+          (sizeof(size_t) + sizeof(unsigned char)); // headings sizes and levels
 
   // send scheme and domain only once, rather than for each link
   std::string scheme;
@@ -167,7 +168,7 @@ html::Stats deserializeHtmlStats(const std::vector<char> &buffer) {
     size_t length;
     read(&length, sizeof(length));
 
-    size_t level;
+    unsigned char level;
     read(&level, sizeof(level));
 
     std::string heading(ptr, ptr + length);
@@ -192,10 +193,6 @@ std::vector<char> serializeSiteGraph(const SiteGraph &graph) {
 
   for (const auto &node : graph.nodes) {
     total_size += node.size();
-  }
-
-  for (const auto &edge : graph.edges) {
-    total_size += edge.first.size() + edge.second.size();
   }
 
   const auto serialized_stats = graph.stats |
@@ -224,18 +221,19 @@ std::vector<char> serializeSiteGraph(const SiteGraph &graph) {
     write(node.data(), length);
   }
 
-  // Write edges
+  // Write edges as pairs of indices into nodes vector to save space
   const auto edges_count = graph.edges.size();
   write(&edges_count, sizeof(edges_count));
 
-  for (const auto &edge : graph.edges) {
-    const auto first_length = edge.first.size();
-    write(&first_length, sizeof(first_length));
-    write(edge.first.data(), first_length);
+  for (const auto &[first, second] : graph.edges) {
+    const auto first_index =
+        std::distance(graph.nodes.begin(), ranges::find(graph.nodes, first));
 
-    const auto second_length = edge.second.size();
-    write(&second_length, sizeof(second_length));
-    write(edge.second.data(), second_length);
+    const auto second_index =
+        std::distance(graph.nodes.begin(), ranges::find(graph.nodes, second));
+
+    write(&first_index, sizeof(first_index));
+    write(&second_index, sizeof(second_index));
   }
 
   // Write stats
@@ -277,19 +275,14 @@ SiteGraph deserializeSiteGraph(const std::vector<char> &buffer) {
   read(&edges_count, sizeof(edges_count));
 
   for (size_t i = 0; i < edges_count; i++) {
-    size_t first_length;
-    read(&first_length, sizeof(first_length));
+    size_t first_index;
+    read(&first_index, sizeof(first_index));
 
-    std::string first(ptr, ptr + first_length);
-    ptr += first_length;
+    size_t second_index;
+    read(&second_index, sizeof(second_index));
 
-    size_t second_length;
-    read(&second_length, sizeof(second_length));
-
-    std::string second(ptr, ptr + second_length);
-    ptr += second_length;
-
-    graph.edges.emplace_back(std::move(first), std::move(second));
+    graph.edges.emplace_back(graph.nodes[first_index],
+                             graph.nodes[second_index]);
   }
 
   // Extract stats
