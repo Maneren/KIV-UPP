@@ -3,7 +3,6 @@
  * Soubory a hlavicku upravujte dle sveho uvazeni a nutnosti
  */
 
-#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <format>
@@ -179,7 +178,6 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
 
   static int farmer = 1;
   for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
-
     std::cout << "Master is sending " << url << " (" << url.size()
               << " bytes) to farmer " << farmer << std::endl;
 
@@ -363,17 +361,18 @@ void worker(MPI_Comm &farmer_comm) {
 }
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-    std::cerr << "Invalid arguments! " << "Expected 4, but got " << argc
-              << std::endl;
-    return EXIT_FAILURE;
-  }
 
   std::cout << "Starting MPI..." << std::endl;
   MPI_Init(&argc, &argv);
 
   MPI_Comm_rank(MPI_COMM_WORLD, &MPIConfig::rank);
   MPI_Comm_size(MPI_COMM_WORLD, &MPIConfig::total);
+
+  if (argc != 5) {
+    std::cerr << "Invalid arguments! " << "Expected 4, but got " << argc
+              << std::endl;
+    return EXIT_FAILURE;
+  }
 
   MPIConfig::farmers = std::atol(argv[2]);
   MPIConfig::workers = std::atol(argv[4]);

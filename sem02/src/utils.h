@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <ostream>
 #include <string>
-#include <vector>
 
 namespace utils {
 // precte cely soubor do retezce

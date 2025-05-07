@@ -4,8 +4,6 @@
  */
 
 #include <algorithm>
-#include <chrono>
-#include <vector>
 #ifdef USE_SSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #endif
