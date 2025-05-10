@@ -106,6 +106,7 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
 
   const auto &domain = start_url.domain;
   const auto &scheme = start_url.scheme;
+  const auto &path = start_url.path;
 
   queue.push(start_url);
 
@@ -153,6 +154,10 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
       // handle relative links
       link.path = (page_parent / link.path).lexically_normal();
 
+      // don't crawl outside of the start url
+      if (!utils::path_is_inside(link.path, path))
+        continue;
+
       // ignore links to the same page
       if (link.path == page_path)
         continue;
@@ -188,7 +193,9 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
   vystup = oss.str();
 
   const auto clean_urls =
-      URLs | views::transform(utils::strip) | ranges::to<std::vector>();
+      URLs | views::transform(utils::strip) |
+      views::filter([](const auto &url) { return !url.empty(); }) |
+      ranges::to<std::vector>();
 
   const auto folders =
       clean_urls | views::transform([](const auto &url) {

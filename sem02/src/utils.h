@@ -41,4 +41,8 @@ std::string safeURL(const std::string &url);
 
 // odstrani pocatecni a koncove bile znaky
 std::string strip(const std::string &s);
+
+// zkontroluje, zda se path nechazi ve slozce base
+bool path_is_inside(const std::filesystem::path &path,
+                    const std::filesystem::path &base);
 } // namespace utils

@@ -82,7 +82,7 @@ URL parseURL(const std::string &url) {
   // ([^?#]*(?:\?[^#]*)?) - Path and optional query
   // (?:#.*)?$ - Optional fragment
   const static std::regex URL_REGEX(
-      R"(^(?:(https?):)?(?://([^:/?#]*)(?::(\d+))?)?([^?#]*(?:\?[^#]*)?)(?:#.*)?)");
+      R"(^(?:(https?):)?(?://([^:/?#]*)(?::(\d+))?)?([^?#]*)(?:\?[^#]*)?(?:#.*)?)");
 
   std::smatch match;
   if (!std::regex_match(url, match, URL_REGEX)) {
@@ -125,6 +125,19 @@ std::string safeURL(const std::string &url) {
 std::string strip(const std::string &s) {
   static const std::regex whitespace(R"(^\s+|\s+$)");
   return std::regex_replace(s, whitespace, "");
+}
+
+bool path_is_inside(const std::filesystem::path &path,
+                    const std::filesystem::path &base) {
+  try {
+    const auto relative = std::filesystem::relative(path, base);
+    return !relative.empty() && relative.string().find("..") != 0;
+  } catch (const std::filesystem::filesystem_error &) {
+    // Handle cases where relative() throws, e.g., paths are on different root
+    // drives
+    std::cerr << "Error: " << std::strerror(errno) << std::endl;
+    return false;
+  }
 }
 
 } // namespace utils
