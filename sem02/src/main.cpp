@@ -37,16 +37,18 @@ static int farmers, workers;
 constexpr auto WAIT_TIME = std::chrono::milliseconds(10);
 
 // Message tags
-enum Tags {
+namespace Tag {
+enum {
   // New url to process
-  URL_TAG,
+  URL,
   // The node should terminate
-  TERMINATE_TAG,
+  TERMINATE,
   // Sending back html::Stats
-  STATS_TAG,
+  STATS,
   // Sending back summary
-  SUMMARY_TAG
+  SUMMARY
 };
+} // namespace Tag
 
 // Distribute as much work to workers as possible using the round-robin
 // algorithm
@@ -76,7 +78,7 @@ bool distribute_work(std::queue<utils::URL> &queue,
               << " to worker " << current_worker << std::endl;
 
     MPI_Send(url_string.data(), url_string.size(), MPI_CHAR, current_worker,
-             URL_TAG, comm);
+             Tag::URL, comm);
 
     active_workers++;
 
@@ -124,13 +126,13 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
     MPI_Status status;
     int message_size;
 
-    MPI_Probe(MPI_ANY_SOURCE, STATS_TAG, comm, &status);
+    MPI_Probe(MPI_ANY_SOURCE, Tag::STATS, comm, &status);
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
     recv_buffer.resize(message_size);
 
     MPI_Recv(recv_buffer.data(), message_size, MPI_CHAR, status.MPI_SOURCE,
-             STATS_TAG, comm, MPI_STATUS_IGNORE);
+             Tag::STATS, comm, MPI_STATUS_IGNORE);
 
     auto stats = serialization::deserializeHtmlStats(recv_buffer);
 
@@ -212,7 +214,8 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
 
     const auto now = chrono::utc_clock::now();
 
-    MPI_Send(url.data(), url.size(), MPI_CHAR, farmer, URL_TAG, MPI_COMM_WORLD);
+    MPI_Send(url.data(), url.size(), MPI_CHAR, farmer, Tag::URL,
+             MPI_COMM_WORLD);
 
     if (++farmer > MPIConfig::farmers) {
       farmer = 1;
@@ -230,12 +233,12 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
     MPI_Status status;
     int message_size;
 
-    MPI_Probe(MPI_ANY_SOURCE, SUMMARY_TAG, MPI_COMM_WORLD, &status);
+    MPI_Probe(MPI_ANY_SOURCE, Tag::SUMMARY, MPI_COMM_WORLD, &status);
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
     buffer.resize(message_size);
     MPI_Recv(buffer.data(), buffer.size(), MPI_CHAR, MPI_ANY_SOURCE,
-             SUMMARY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+             Tag::SUMMARY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     std::cout << "Master received graph of " << url << " (" << buffer.size()
               << " bytes)" << std::endl;
@@ -276,7 +279,7 @@ int master(MPI_Comm &farmer_worker_comm) {
 
   // Send termination signal to all workers
   for (int i = 1; i < MPIConfig::total; i++) {
-    MPI_Send(nullptr, 0, MPI_INT, i, TERMINATE_TAG, MPI_COMM_WORLD);
+    MPI_Send(nullptr, 0, MPI_INT, i, Tag::TERMINATE, MPI_COMM_WORLD);
   }
 
   return status;
@@ -303,12 +306,12 @@ void farmer(MPI_Comm &worker_comm) {
       continue;
     }
 
-    if (status.MPI_TAG == TERMINATE_TAG) {
-      MPI_Recv(nullptr, 0, MPI_CHAR, 0, TERMINATE_TAG, MPI_COMM_WORLD,
+    if (status.MPI_TAG == Tag::TERMINATE) {
+      MPI_Recv(nullptr, 0, MPI_CHAR, 0, Tag::TERMINATE, MPI_COMM_WORLD,
                MPI_STATUS_IGNORE);
 
       for (int i = 1; i < MPIConfig::workers; i++) {
-        MPI_Send(nullptr, 0, MPI_INT, i, TERMINATE_TAG, worker_comm);
+        MPI_Send(nullptr, 0, MPI_INT, i, Tag::TERMINATE, worker_comm);
       }
 
       break;
@@ -317,7 +320,7 @@ void farmer(MPI_Comm &worker_comm) {
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
     url.resize(message_size);
-    MPI_Recv(url.data(), url.size(), MPI_CHAR, 0, URL_TAG, MPI_COMM_WORLD,
+    MPI_Recv(url.data(), url.size(), MPI_CHAR, 0, Tag::URL, MPI_COMM_WORLD,
              MPI_STATUS_IGNORE);
 
     std::cout << "Farmer " << MPIConfig::rank << " is processing " << url
@@ -330,7 +333,7 @@ void farmer(MPI_Comm &worker_comm) {
     std::cout << "Farmer " << MPIConfig::rank << " serialized graph for " << url
               << " (" << serialized.size() << " bytes)" << std::endl;
 
-    MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, SUMMARY_TAG,
+    MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, Tag::SUMMARY,
              MPI_COMM_WORLD);
   }
 }
@@ -359,8 +362,8 @@ void worker(MPI_Comm &farmer_comm) {
       continue;
     }
 
-    if (status.MPI_TAG == TERMINATE_TAG) {
-      MPI_Recv(nullptr, 0, MPI_CHAR, 0, TERMINATE_TAG, farmer_comm,
+    if (status.MPI_TAG == Tag::TERMINATE) {
+      MPI_Recv(nullptr, 0, MPI_CHAR, 0, Tag::TERMINATE, farmer_comm,
                MPI_STATUS_IGNORE);
       std::cout << "Worker " << MPIConfig::rank
                 << " received a termination signal and is shutting down"
@@ -372,7 +375,7 @@ void worker(MPI_Comm &farmer_comm) {
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
     buffer.resize(message_size);
-    MPI_Recv(buffer.data(), message_size, MPI_CHAR, 0, URL_TAG, farmer_comm,
+    MPI_Recv(buffer.data(), message_size, MPI_CHAR, 0, Tag::URL, farmer_comm,
              MPI_STATUS_IGNORE);
 
     std::cout << "Worker " << MPIConfig::rank << " received " << buffer << " ("
@@ -388,8 +391,7 @@ void worker(MPI_Comm &farmer_comm) {
 
     std::cout << "Worker " << MPIConfig::rank << " parsed stats for " << buffer
               << " (" << serialized.size() << " bytes)" << std::endl;
-
-    MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, STATS_TAG,
+    MPI_Send(serialized.data(), serialized.size(), MPI_CHAR, 0, Tag::STATS,
              farmer_comm);
   }
 }
