@@ -182,22 +182,22 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
 }
 
 void process(const std::vector<std::string> &URLs, std::string &vystup) {
+  const auto clean_urls =
+      URLs | views::transform(utils::strip) |
+      views::filter([](const auto &url) { return !url.empty(); }) |
+      ranges::to<std::vector>();
+
   std::stringstream oss;
 
   oss << "Zadali jste: <ul>";
 
-  for (const auto &url : URLs) {
+  for (const auto &url : clean_urls) {
     oss << "<li>" << url << "</li>";
   }
 
   oss << "</ul>";
 
   vystup = oss.str();
-
-  const auto clean_urls =
-      URLs | views::transform(utils::strip) |
-      views::filter([](const auto &url) { return !url.empty(); }) |
-      ranges::to<std::vector>();
 
   const auto folders =
       clean_urls | views::transform([](const auto &url) {
