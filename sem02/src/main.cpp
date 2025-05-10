@@ -263,7 +263,7 @@ int master(MPI_Comm &farmer_worker_comm) {
 
   // inicializace serveru
   CServer svr;
-  if (!svr.Init("./data", "localhost", 8001)) {
+  if (!svr.Init("./data", "0.0.0.0", 8001)) {
     std::cerr << "Nelze inicializovat server!" << std::endl;
     return EXIT_FAILURE;
   }
