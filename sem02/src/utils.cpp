@@ -107,12 +107,12 @@ std::string safeURL(const std::string &url) {
   const auto parsed = parseURL(url);
   std::string result = parsed.domain + parsed.path.string();
 
-  // Use a lambda to check if a character is alphanumeric or in the allowed set
+  // Allow alphanumeric characters, hyphens, and underscores
   const auto isAllowed = [](char c) {
     return std::isalnum(c) || c == '-' || c == '_';
   };
 
-  // Replace other characters with `_`
+  // Replace all characters with `_`
   std::transform(result.begin(), result.end(), result.begin(),
                  [&](char c) { return isAllowed(c) ? c : '_'; });
 

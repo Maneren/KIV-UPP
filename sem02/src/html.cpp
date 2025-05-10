@@ -19,6 +19,7 @@ std::ostream &operator<<(std::ostream &os, const Stats &stats) {
 }
 
 Stats parse(const utils::URL &url) {
+  // Regular expressions to match HTML elements
   const static std::regex img_regex(R"(<img\b)");
   const static std::regex form_regex(R"(<form\b)");
   const static std::regex link_regex(R"(<a\b[^>]+href="([^"]+)\")");
@@ -26,14 +27,17 @@ Stats parse(const utils::URL &url) {
 
   const auto html = utils::downloadHTML(url.toString());
 
+  // Count the number of <img> tags
   const size_t images =
       std::distance(std::sregex_iterator(html.begin(), html.end(), img_regex),
                     std::sregex_iterator());
 
+  // Count the number of <form> tags
   const size_t forms =
       std::distance(std::sregex_iterator(html.begin(), html.end(), form_regex),
                     std::sregex_iterator());
 
+  // Extract and filter links from <a> tags
   std::vector<utils::URL> links;
   for (std::sregex_iterator it(html.begin(), html.end(), link_regex), end_it;
        it != end_it; ++it) {
@@ -44,6 +48,8 @@ Stats parse(const utils::URL &url) {
       continue;
     }
 
+    // Skip links with different schemes or domains (missing are considered as
+    // same)
     if ((!link_url.scheme.empty() && link_url.scheme != url.scheme) ||
         (!link_url.domain.empty() && link_url.domain != url.domain)) {
       continue;
@@ -52,6 +58,7 @@ Stats parse(const utils::URL &url) {
     links.push_back(link_url);
   }
 
+  // Extract headings and their levels
   std::vector<std::pair<unsigned char, std::string>> headings;
   for (std::sregex_iterator it(html.begin(), html.end(), heading_regex), end_it;
        it != end_it; ++it) {

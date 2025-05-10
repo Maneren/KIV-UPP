@@ -33,13 +33,28 @@ static int rank, total;
 static int farmers, workers;
 } // namespace MPIConfig
 
+// Time to sleep if no message is available
 constexpr auto WAIT_TIME = std::chrono::milliseconds(10);
 
-enum Tags { URL_TAG, TERMINATE_TAG, STATS_TAG, SUMMARY_TAG };
+// Message tags
+enum Tags {
+  // New url to process
+  URL_TAG,
+  // The node should terminate
+  TERMINATE_TAG,
+  // Sending back html::Stats
+  STATS_TAG,
+  // Sending back summary
+  SUMMARY_TAG
+};
 
+// Distribute as much work to workers as possible using the round-robin
+// algorithm
+//
+// Returns true if any work was distributed, false otherwise
 bool distribute_work(std::queue<utils::URL> &queue,
                      std::set<std::string> &visited, int &active_workers,
-                     int &current_worker, MPI_Comm &comm) {
+                     int &current_worker, const MPI_Comm &comm) {
   bool success = false;
 
   while (!queue.empty() && active_workers < MPIConfig::workers) {
@@ -72,6 +87,7 @@ bool distribute_work(std::queue<utils::URL> &queue,
   return success;
 }
 
+// Creates a graph of the site starting from the given URL
 SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
   // ordered sets are used, because we would sort the resulting vectors anyways
   std::set<std::string> visited;
@@ -79,6 +95,7 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
 
   std::queue<utils::URL> queue;
 
+  // comparison function for stats, so we can use std::set
   struct stats_less {
     bool operator()(const html::Stats &a, const html::Stats &b) const {
       return a.path < b.path;
@@ -97,10 +114,12 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
 
   std::vector<char> recv_buffer;
 
+  // While we can distribute work to workers or we have any active workers
   while (
       distribute_work(queue, visited, active_workers, current_worker, comm) ||
       active_workers > 0) {
 
+    // Wait for stats from a worker
     MPI_Status status;
     int message_size;
 
@@ -131,8 +150,10 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
       else if (link.domain != domain)
         continue;
 
+      // handle relative links
       link.path = (page_parent / link.path).lexically_normal();
 
+      // ignore links to the same page
       if (link.path == page_path)
         continue;
 
@@ -176,6 +197,7 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
       }) |
       ranges::to<std::vector>();
 
+  // Send URLs to farmers
   static int farmer = 1;
   for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
     std::cout << "Master is sending " << url << " (" << url.size()
@@ -254,12 +276,14 @@ int master(MPI_Comm &farmer_worker_comm) {
 }
 
 void farmer(MPI_Comm &worker_comm) {
+  // initialize farmer
   int color = MPIConfig::rank;
   MPI_Comm_split(MPI_COMM_WORLD, color, 0, &worker_comm);
 
   std::cout << "Farmer " << MPIConfig::rank << " initialized with color "
             << color << std::endl;
 
+  // Receive URLs from master until we get a termination signal
   std::string url;
   while (true) {
     MPI_Status status;
@@ -305,6 +329,7 @@ void farmer(MPI_Comm &worker_comm) {
 }
 
 void worker(MPI_Comm &farmer_comm) {
+  // initialize worker - color matches its respective farmer
   int color =
       (MPIConfig::rank - 1 - MPIConfig::farmers) / MPIConfig::workers + 1;
   MPI_Comm_split(MPI_COMM_WORLD, color, MPIConfig::rank, &farmer_comm);
@@ -315,6 +340,7 @@ void worker(MPI_Comm &farmer_comm) {
   std::cout << "Worker " << MPIConfig::rank << " initialized with color "
             << color << " and rank " << comm_rank << std::endl;
 
+  // receive URLs from master
   std::string buffer;
   while (true) {
     MPI_Status status;
@@ -345,6 +371,7 @@ void worker(MPI_Comm &farmer_comm) {
     std::cout << "Worker " << MPIConfig::rank << " received " << buffer << " ("
               << buffer.size() << " bytes)" << std::endl;
 
+    // parse received URL
     const auto url = utils::parseURL(buffer);
 
     const auto stats = html::parse(url);
