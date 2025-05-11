@@ -86,10 +86,10 @@ std::vector<char> serializeHtmlStats(const html::Stats &stats) {
   write(&link_count, sizeof(link_count));
 
   for (const auto &link : links) {
-    const auto linkLen = link.size();
+    const auto length = link.size();
 
-    write(&linkLen, sizeof(linkLen));
-    write(link.data(), linkLen);
+    write(&length, sizeof(length));
+    write(link.data(), length);
   }
 
   // Add headings
@@ -290,13 +290,13 @@ SiteGraph deserializeSiteGraph(const std::vector<char> &buffer) {
   read(&stats_count);
 
   for (size_t i = 0; i < stats_count; i++) {
-    size_t stats_length;
-    read(&stats_length);
+    size_t length;
+    read(&length);
 
-    std::vector<char> stats_buffer(ptr, ptr + stats_length);
-    ptr += stats_length;
+    std::vector<char> buffer(ptr, ptr + length);
+    ptr += length;
 
-    graph.stats.push_back(deserializeHtmlStats(stats_buffer));
+    graph.stats.push_back(deserializeHtmlStats(buffer));
   }
 
   return graph;
