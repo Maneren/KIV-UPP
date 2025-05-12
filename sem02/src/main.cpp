@@ -4,7 +4,6 @@
  */
 
 #include <chrono>
-#include <cstring>
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -46,7 +45,9 @@ enum {
   // Sending back html::Stats
   STATS,
   // Sending back summary
-  SUMMARY
+  SUMMARY,
+  // Sending back errors
+  ERROR
 };
 } // namespace Tag
 
@@ -77,8 +78,14 @@ bool distribute_work(std::queue<utils::URL> &queue,
     std::cout << "Farmer " << MPIConfig::rank << " sending " << url_string
               << " to worker " << current_worker << std::endl;
 
-    MPI_Send(url_string.data(), url_string.size(), MPI_CHAR, current_worker,
-             Tag::URL, comm);
+    int result = MPI_Send(url_string.data(), url_string.size(), MPI_CHAR,
+                          current_worker, Tag::URL, comm);
+
+    if (result != MPI_SUCCESS) {
+      throw std::runtime_error(
+          std::format("Farmer {} failed to send url to worker {}",
+                      MPIConfig::rank, current_worker));
+    }
 
     active_workers++;
 
@@ -131,8 +138,15 @@ SiteGraph map_site(const utils::URL &start_url, MPI_Comm comm) {
 
     recv_buffer.resize(message_size);
 
-    MPI_Recv(recv_buffer.data(), message_size, MPI_CHAR, status.MPI_SOURCE,
-             Tag::STATS, comm, MPI_STATUS_IGNORE);
+    int result =
+        MPI_Recv(recv_buffer.data(), message_size, MPI_CHAR, status.MPI_SOURCE,
+                 Tag::STATS, comm, MPI_STATUS_IGNORE);
+
+    if (result != MPI_SUCCESS) {
+      throw std::runtime_error(
+          std::format("Farmer {} failed to receive stats from worker {}",
+                      MPIConfig::rank, status.MPI_SOURCE));
+    }
 
     auto stats = serialization::deserializeHtmlStats(recv_buffer);
 
@@ -213,9 +227,14 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
               << " bytes) to farmer " << farmer << std::endl;
 
     const auto now = chrono::utc_clock::now();
+    std::ofstream logfile(folder + "/log.txt");
 
-    MPI_Send(url.data(), url.size(), MPI_CHAR, farmer, Tag::URL,
-             MPI_COMM_WORLD);
+    int result = MPI_Send(url.data(), url.size(), MPI_CHAR, farmer, Tag::URL,
+                          MPI_COMM_WORLD);
+
+    if (result != MPI_SUCCESS) {
+      logfile << "ERROR:‌ Master failed to send url" << farmer << std::endl;
+    }
 
     if (++farmer > MPIConfig::farmers) {
       farmer = 1;
@@ -223,22 +242,41 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
 
     std::filesystem::create_directories(folder);
 
-    std::ofstream logfile(folder + "/log.txt");
     logfile << std::format("{:%Y-%m-%d %H:%M:%S}", now) << std::endl;
   }
 
   // Receive results from all farmers
   std::vector<char> buffer;
   for (const auto &[url, folder] : views::zip(clean_urls, folders)) {
+    std::ofstream logfile(folder + "/log.txt", std::ofstream::app);
+
     MPI_Status status;
     int message_size;
 
     MPI_Probe(MPI_ANY_SOURCE, Tag::SUMMARY, MPI_COMM_WORLD, &status);
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
+    if (status.MPI_TAG == Tag::ERROR) {
+      std::string error(message_size, '\0');
+      MPI_Recv(error.data(), error.size(), MPI_CHAR, status.MPI_SOURCE,
+               Tag::ERROR, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      std::cerr << "Master received error from farmer " << status.MPI_SOURCE
+                << ": " << error;
+      logfile << "ERROR:‌ " << error << std::endl;
+      continue;
+    }
+
     buffer.resize(message_size);
-    MPI_Recv(buffer.data(), buffer.size(), MPI_CHAR, MPI_ANY_SOURCE,
-             Tag::SUMMARY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    int result =
+        MPI_Recv(buffer.data(), buffer.size(), MPI_CHAR, MPI_ANY_SOURCE,
+                 Tag::SUMMARY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    if (result != MPI_SUCCESS) {
+      std::cerr << "Master failed to receive graph from farmer "
+                << status.MPI_SOURCE << std::endl;
+
+      logfile << "ERROR:‌ Failed to receive graph" << std::endl;
+      continue;
+    }
 
     std::cout << "Master received graph of " << url << " (" << buffer.size()
               << " bytes)" << std::endl;
@@ -254,9 +292,15 @@ void process(const std::vector<std::string> &URLs, std::string &vystup) {
     }
 
     const auto now = chrono::utc_clock::now();
-    std::ofstream logfile(folder + "/log.txt", std::ofstream::app);
     logfile << std::format("{:%Y-%m-%d %H:%M:%S}", now) << std::endl;
     logfile << "OK" << std::endl;
+  }
+}
+
+void terminate_all() {
+  // Send termination signal to all nodes in the world
+  for (int i = 1; i < MPIConfig::total; i++) {
+    MPI_Send(nullptr, 0, MPI_INT, i, Tag::TERMINATE, MPI_COMM_WORLD);
   }
 }
 
@@ -277,10 +321,7 @@ int master(MPI_Comm &farmer_worker_comm) {
   // spusteni serveru
   const auto status = svr.Run() ? EXIT_SUCCESS : EXIT_FAILURE;
 
-  // Send termination signal to all workers
-  for (int i = 1; i < MPIConfig::total; i++) {
-    MPI_Send(nullptr, 0, MPI_INT, i, Tag::TERMINATE, MPI_COMM_WORLD);
-  }
+  terminate_all();
 
   return status;
 }
@@ -320,13 +361,29 @@ void farmer(MPI_Comm &worker_comm) {
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
     url.resize(message_size);
-    MPI_Recv(url.data(), url.size(), MPI_CHAR, 0, Tag::URL, MPI_COMM_WORLD,
-             MPI_STATUS_IGNORE);
+    int result = MPI_Recv(url.data(), url.size(), MPI_CHAR, 0, Tag::URL,
+                          MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    if (result != MPI_SUCCESS) {
+      std::string error = std::format(
+          "Farmer {} failed to receive URL from master", MPIConfig::rank);
+      MPI_Send(error.data(), error.size(), MPI_CHAR, 0, Tag::ERROR,
+               MPI_COMM_WORLD);
+      continue;
+    }
 
     std::cout << "Farmer " << MPIConfig::rank << " is processing " << url
               << std::endl;
 
-    const auto graph = map_site(utils::parseURL(url), worker_comm);
+    SiteGraph graph;
+    try {
+      graph = map_site(utils::parseURL(url), worker_comm);
+    } catch (const std::exception &e) {
+      std::string error = e.what();
+      MPI_Send(error.data(), error.size(), MPI_CHAR, 0, Tag::ERROR,
+               MPI_COMM_WORLD);
+      continue;
+    }
 
     const auto serialized = serialization::serializeSiteGraph(graph);
 
@@ -375,8 +432,16 @@ void worker(MPI_Comm &farmer_comm) {
     MPI_Get_count(&status, MPI_CHAR, &message_size);
 
     buffer.resize(message_size);
-    MPI_Recv(buffer.data(), message_size, MPI_CHAR, 0, Tag::URL, farmer_comm,
-             MPI_STATUS_IGNORE);
+    int result = MPI_Recv(buffer.data(), message_size, MPI_CHAR, 0, Tag::URL,
+                          farmer_comm, MPI_STATUS_IGNORE);
+
+    if (result != MPI_SUCCESS) {
+      std::string error = std::format(
+          "Worker {} failed to receive URL from master", MPIConfig::rank);
+      MPI_Send(error.data(), error.size(), MPI_CHAR, 0, Tag::ERROR,
+               farmer_comm);
+      continue;
+    }
 
     std::cout << "Worker " << MPIConfig::rank << " received " << buffer << " ("
               << buffer.size() << " bytes)" << std::endl;
@@ -397,15 +462,16 @@ void worker(MPI_Comm &farmer_comm) {
 }
 
 int main(int argc, char **argv) {
-
   std::cout << "Starting MPI..." << std::endl;
   MPI_Init(&argc, &argv);
+
+  MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
   MPI_Comm_rank(MPI_COMM_WORLD, &MPIConfig::rank);
   MPI_Comm_size(MPI_COMM_WORLD, &MPIConfig::total);
 
   if (argc != 5) {
-    std::cerr << "Invalid arguments! " << "Expected 4, but got " << argc
+    std::cerr << "Invalid number of arguments! Expected 4, but got " << argc
               << std::endl;
     return EXIT_FAILURE;
   }
@@ -420,8 +486,6 @@ int main(int argc, char **argv) {
     std::cerr << "Number of farmers and workers can't be zero!" << std::endl;
     return EXIT_FAILURE;
   }
-
-  MPI_Barrier(MPI_COMM_WORLD);
 
   if (MPIConfig::rank == 0) {
     std::cout << "Farmers: " << MPIConfig::farmers << std::endl;
