@@ -88,9 +88,10 @@ void ParallelRenderer::render_months(
     const Stations &stations, const std::vector<StationMonthlyStats> &stats) {
   mMinmax = minmax_station_averages(stats);
 
-  pool.for_each(MONTHS | std::views::enumerate, [&, this](const auto item) {
-    const auto &[i, month] = item;
-    render_month_to_file(stations, stats, i,
-                         std::format("output/{}.svg", month));
-  });
+  threadpool::pool.for_each(
+      MONTHS | std::views::enumerate, [&, this](const auto item) {
+        const auto &[i, month] = item;
+        render_month_to_file(stations, stats, i,
+                             std::format("output/{}.svg", month));
+      });
 }

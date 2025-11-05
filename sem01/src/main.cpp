@@ -10,7 +10,6 @@
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <memory>
 #include <ostream>
 #include <ranges>
@@ -217,9 +216,10 @@ int main(int argc, char *argv[]) {
 
   const auto elapsed = std::chrono::high_resolution_clock::now() - start;
 
-  auto measurements = std::ranges::fold_left(
-      stations | std::views::transform(
-                     [](auto &station) { return station.measurements.size(); }),
+  const auto measurements = std::ranges::fold_left(
+      stations | std::views::transform([](const auto &station) {
+        return station.measurements.size();
+      }),
       0, std::plus<>{});
 
   std::cout << std::format(
@@ -291,7 +291,7 @@ int main(int argc, char *argv[]) {
     outlier_file << OUTLIER_FILE_HEADER << std::endl;
     detector->find_outliers(stations, stats, outlier_file);
   } else {
-    pool.spawn([&stations, stats_ptr, &detector] {
+    threadpool::pool.spawn([&stations, stats_ptr, &detector] {
       std::ofstream outlier_file("output/vykyvy.csv");
       outlier_file << OUTLIER_FILE_HEADER << std::endl;
       detector->find_outliers(stations, *stats_ptr, outlier_file);
@@ -339,7 +339,7 @@ int main(int argc, char *argv[]) {
                              total / TEST_RUNS);
   }
 
-  pool.join();
+  threadpool::pool.join();
 
   if constexpr (!PERF_TEST) {
     const auto elapsed =

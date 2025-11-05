@@ -8,6 +8,17 @@
 #include <utility>
 #include <vector>
 
+namespace threadpool {
+
+namespace detail {
+
+bool try_run_task(std::unique_lock<std::mutex> &&lock,
+                  std::queue<std::function<void()>> &tasks);
+
+} // namespace detail
+
+template <typename R> class future;
+
 /**
  * @class Threadpool
  * @brief A thread pool for managing and executing tasks concurrently.
@@ -67,6 +78,8 @@ public:
     return *this;
   }
 
+  using Task = std::function<void()>;
+
   /**
    * @brief Spawn a task and returns a future to retrieve its result.
    *
@@ -88,7 +101,7 @@ public:
           return f(std::forward<Args>(args)...);
         });
     spawn([task]() { (*task)(); });
-    return task->get_future();
+    return future(task->get_future(), *this);
   }
 
   /**
@@ -96,7 +109,7 @@ public:
    *
    * @param task A callable object representing the task to execute.
    */
-  inline void spawn(std::function<void()> &&task) {
+  inline void spawn(Task &&task) {
     {
       std::unique_lock<std::mutex> lock(mMutex);
       mTasks.emplace(std::move(task));
@@ -122,7 +135,7 @@ public:
     // binder objects, but I can't get it to work with the forwarding. It has to
     // be able to pass args both as references and as values, but I only managed
     // to get it to work as values.
-    spawn(static_cast<std::function<void()>>(
+    spawn(static_cast<Task>(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...)));
   }
 
@@ -212,13 +225,46 @@ public:
 
 private:
   std::vector<std::jthread> mWorkers;
-  std::queue<std::function<void()>> mTasks;
+  std::queue<Task> mTasks;
   std::mutex mMutex;
   std::condition_variable mCondition;
   bool mRunning = true;
+
+  template <typename R> friend class future;
+  friend bool detail::try_run_task(std::unique_lock<std::mutex> &&lock,
+                                   std::queue<Task> &tasks);
+};
+
+template <typename R> class future : public std::future<R> {
+public:
+  future(std::future<R> &&future, Threadpool &pool)
+      : std::future<R>(std::move(future)), mPool(pool) {}
+
+  R get() {
+    Threadpool::Task task;
+    while (!this->valid()) {
+      std::unique_lock<std::mutex> lock(mPool.mMutex);
+      if (mPool.mTasks.empty()) {
+        lock.unlock();
+        std::this_thread::yield();
+        return this->get();
+      }
+
+      task = std::move(mPool.mTasks.front());
+      mPool.mTasks.pop();
+
+      lock.unlock();
+      task();
+    }
+  }
+
+private:
+  Threadpool &mPool;
 };
 
 /**
  * @brief A global thread pool instance initialized at program startup.
  */
 extern Threadpool pool;
+
+} // namespace threadpool

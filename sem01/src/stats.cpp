@@ -47,7 +47,7 @@ SerialStats::monthly_stats(const Stations &stations) const {
 
 std::vector<StationMonthlyStats>
 ParallelStats::monthly_stats(const Stations &stations) const {
-  return pool.transform(stations, calculate_monthly_stats) |
+  return threadpool::pool.transform(stations, calculate_monthly_stats) |
          std::views::transform([](std::future<StationMonthlyStats> &f) mutable {
            return f.get();
          }) |

@@ -1,5 +1,8 @@
 #include "threadpool.hpp"
 #include <algorithm>
+#include <mutex>
+
+namespace threadpool {
 
 Threadpool::Threadpool(size_t thread_count) {
   thread_count = std::min(thread_count, static_cast<size_t>(8));
@@ -7,20 +10,21 @@ Threadpool::Threadpool(size_t thread_count) {
 
   for (std::size_t i = 0; i < thread_count; ++i) {
     mWorkers.emplace_back([this] {
+      std::function<void()> task;
       while (true) {
-        std::function<void()> task;
-        {
-          std::unique_lock<std::mutex> lock(mMutex);
-          mCondition.wait(lock,
-                          // shutting down or task available
-                          [this] { return !mRunning || !mTasks.empty(); });
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCondition.wait(lock,
+                        // shutting down or task available
+                        [&] { return !mRunning || !mTasks.empty(); });
 
-          if (!mRunning && mTasks.empty())
-            return;
+        if (!mRunning && mTasks.empty())
+          return;
 
-          task = std::move(mTasks.front());
-          mTasks.pop();
-        }
+        task = std::move(mTasks.front());
+        mTasks.pop();
+
+        lock.unlock();
+
         task();
       }
     });
@@ -37,3 +41,5 @@ void Threadpool::join() {
 }
 
 Threadpool pool{};
+
+} // namespace threadpool

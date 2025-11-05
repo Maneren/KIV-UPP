@@ -30,7 +30,7 @@ void SerialPreprocessor::preprocess_data(Stations &stations) const {
 }
 
 void ParallelPreprocessor::preprocess_data(Stations &stations) const {
-  for (auto [i, future] : pool.transform(stations, valid_station) |
+  for (auto [i, future] : threadpool::pool.transform(stations, valid_station) |
                               std::views::enumerate | std::views::reverse) {
     if (!future.get()) {
       swap_remove(stations, i);

@@ -67,7 +67,7 @@ size_t ParallelOutlierDetector::find_outliers(
     output_outliers(station, station_stats, save_outlier);
   };
 
-  pool.for_each(std::views::zip(stations, stats), process_station);
+  threadpool::pool.for_each(std::views::zip(stations, stats), process_station);
 
   return outliers_count;
 }
