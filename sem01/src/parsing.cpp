@@ -16,7 +16,7 @@ using std::operator""sv;
  * Simpler and faster version of stoul optimized for raw speed with no error
  * or bounds checking.
  */
-size_t str_to_number(std::string_view str) {
+size_t str_to_number(auto str) {
   size_t result = 0;
   // disable loop unrolling, since the numbers are usually only a few digits
   // long
@@ -129,41 +129,12 @@ void parse_line(const std::string_view line, const auto &callback) {
   auto tokens = std::views::split(line, ';');
   auto iterator = tokens.begin();
 
-  auto id_str = iterator++;
-  if (id_str == tokens.end()) {
-    throw std::runtime_error("Failed to read id field.");
-  }
-  size_t id = str_to_number(std::string_view(*id_str));
-
-  auto ordinal_str = iterator++;
-  if (ordinal_str == tokens.end()) {
-    throw std::runtime_error("Failed to read ordinal field.");
-  }
-  size_t ordinal = str_to_number(std::string_view(*ordinal_str));
-
-  auto year_str = iterator++;
-  if (year_str == tokens.end()) {
-    throw std::runtime_error("Failed to read year field.");
-  }
-  Year year = str_to_number(std::string_view(*year_str));
-
-  auto month_str = iterator++;
-  if (month_str == tokens.end()) {
-    throw std::runtime_error("Failed to read month field.");
-  }
-  Month month = str_to_number(std::string_view(*month_str));
-
-  auto day_str = iterator++;
-  if (day_str == tokens.end()) {
-    throw std::runtime_error("Failed to read day field.");
-  }
-  Day day = str_to_number(std::string_view(*day_str));
-
-  auto value_str = iterator++;
-  if (value_str == tokens.end()) {
-    throw std::runtime_error("Failed to read value field.");
-  }
-  Temperature value = str_to_double(std::string_view(*value_str));
+  size_t id = str_to_number(*iterator++);
+  size_t ordinal = str_to_number(*iterator++);
+  Year year = str_to_number(*iterator++);
+  Month month = str_to_number(*iterator++);
+  Day day = str_to_number(*iterator++);
+  Temperature value = str_to_double(*iterator++);
 
   callback(id, ordinal, year, month, day, value);
 }
