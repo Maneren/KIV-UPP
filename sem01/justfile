@@ -1,5 +1,6 @@
 builddir := justfile_directory() / "build"
 export CMAKE_EXPORT_COMPILE_COMMANDS := "1"
+export CXXFLAGS := "-march=native -flto=thin -O3"
 
 [private]
 default:
@@ -7,11 +8,11 @@ default:
 
 configure:
     mkdir -p {{ builddir }}
-    cmake -DCMAKE_BUILD_TYPE=Debug -S . -B {{ builddir }}
+    cmake -DCMAKE_BUILD_TYPE=Debug -S . -B {{ builddir }} -G Ninja
 
 configure_release:
     mkdir -p {{ builddir }}
-    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -S . -B {{ builddir }}
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -S . -B {{ builddir }} -G Ninja
 
 build:
     cmake --build {{ builddir }}
