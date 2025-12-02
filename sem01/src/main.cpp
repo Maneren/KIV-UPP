@@ -127,7 +127,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
   return stations;
 }
 
-std::tuple<size_t, Measurement> parse_line(const std::string_view line) {
+void parse_line(const std::string_view line, const auto &callback) {
   auto tokens = std::views::split(line, ';');
   auto iterator = tokens.begin();
 
@@ -167,14 +167,19 @@ std::tuple<size_t, Measurement> parse_line(const std::string_view line) {
   }
   Temperature value = str_to_double(*value_str);
 
-  return {id, {ordinal, year, month, day, value}};
+  callback(id, ordinal, year, month, day, value);
 }
 
 void process_measurements_serial(Stations &stations, std::string_view content) {
   for (const auto line : std::views::split(content, '\n')) {
     if (!line.empty()) {
-      const auto [id, measurement] = parse_line(std::string_view(line));
-      stations[id - 1].measurements.emplace_back(std::move(measurement));
+      const auto callback = [&](const size_t id, const size_t ordinal,
+                                const Year year, const Month month,
+                                const Day day, const Temperature value) {
+        stations[id - 1].measurements.emplace_back(ordinal, year, month, day,
+                                                   value);
+      };
+      parse_line(std::string_view(line), callback);
     }
   }
 }
@@ -204,13 +209,13 @@ void process_measurements_parallel(Stations &stations,
 
     size_t last_id = std::numeric_limits<size_t>::max();
 
-    do {
-      size_t newline_index = std::min(chunk.find('\n'), chunk.size() - 1);
-      auto [id, measurement] = parse_line(chunk.substr(0, newline_index));
-      chunk = chunk.substr(newline_index + 1);
-
-      // hold the lock for the current station until we hit another one
-      // This exploits the fact that the data is sorted by station id
+    const auto callback = [&stations, &mutexes,
+                           &last_id](const size_t id, const size_t ordinal,
+                                     const Year year, const Month month,
+                                     const Day day, const Temperature value) {
+      // hold the lock for the current station until we hit another
+      // one This exploits the fact that the data is sorted by
+      // station id
       if (last_id != id) {
         if (last_id != std::numeric_limits<size_t>::max()) {
           mutexes[last_id - 1].unlock();
@@ -219,7 +224,14 @@ void process_measurements_parallel(Stations &stations,
         last_id = id;
       }
 
-      stations[id - 1].measurements.push_back(measurement);
+      auto &measurements = stations[id - 1].measurements;
+      measurements.emplace_back(ordinal, year, month, day, value);
+    };
+
+    do {
+      size_t newline_index = std::min(chunk.find('\n'), chunk.size() - 1);
+      parse_line(chunk.substr(0, newline_index), callback);
+      chunk = chunk.substr(newline_index + 1);
     } while (!chunk.empty());
 
     if (last_id != std::numeric_limits<size_t>::max()) {
