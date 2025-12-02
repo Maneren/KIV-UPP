@@ -109,29 +109,10 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     auto tokens = std::views::split(file_line, ';');
     auto iterator = tokens.begin();
 
-    auto id_str = iterator++;
-    if (id_str == tokens.end()) {
-      throw std::runtime_error("Failed to read id field.");
-    }
-    size_t id = str_to_number(std::string_view(*id_str));
-
-    auto name_str = iterator++;
-    if (name_str == tokens.end()) {
-      throw std::runtime_error("Failed to read name field.");
-    }
-    std::string name = *name_str | std::ranges::to<std::string>();
-
-    auto longitude_str = iterator++;
-    if (longitude_str == tokens.end()) {
-      throw std::runtime_error("Failed to read longitude field.");
-    }
-    float longitude = str_to_double(std::string_view(*longitude_str));
-
-    auto latitude_str = iterator++;
-    if (latitude_str == tokens.end()) {
-      throw std::runtime_error("Failed to read latitude field.");
-    }
-    float latitude = str_to_double(std::string_view(*latitude_str));
+    size_t id = str_to_number(*iterator++);
+    std::string name = *iterator++ | std::ranges::to<std::string>();
+    float longitude = str_to_double(std::string_view(*iterator++));
+    float latitude = str_to_double(std::string_view(*iterator++));
 
     stations.emplace_back(id, name, std::make_pair(latitude, longitude));
   }
@@ -247,10 +228,10 @@ void fill_measurements(Stations &stations,
   }
 
   // skip header
-  size_t newline_index = file_string.find('\n');
+  size_t newline_index = file_string.find("\r\n"sv);
 
   std::string_view file_string_view =
-      std::string_view(file_string).substr(newline_index + 1);
+      std::string_view(file_string).substr(newline_index + 2);
 
   if (parallel) {
     process_measurements_parallel(stations, file_string_view);
