@@ -1,9 +1,14 @@
 #include "parsing.hpp"
 #include "threadpool.hpp"
 #include <algorithm>
+#include <cmath>
+#include <format>
 #include <fstream>
+#include <iostream>
 #include <mutex>
 #include <ranges>
+
+using std::operator""sv;
 
 /**
  * @brief Converts a string to a number.
@@ -30,38 +35,43 @@ size_t str_to_number(std::string_view str) {
  * or bounds checking.
  */
 double str_to_double(auto str) {
-  double result = 0.;
-  bool dot = false;
-  size_t power = 10;
+  const char *ptr = str.data();
+  const char *end = str.end();
 
-  double signum = 1.;
-  if (str[0] == '-') {
-    signum = -1.;
-    str = str | std::views::drop(1);
+  bool has_signum = str[0] == '-';
+  ptr += has_signum;
+
+  int_fast64_t acc = 0;
+
+#pragma clang loop unroll(disable)
+  while (ptr < end && *ptr != '.') {
+    acc *= 10;
+    acc += *ptr - '0';
+    ptr++;
   }
 
-  for (const char c : str) {
-    if (c == '.') {
-      dot = true;
-      power = 10;
-      continue;
-    }
+  double whole = has_signum ? -acc : acc;
 
-    if (!std::isdigit(c))
-      break;
-
-    double digit = c - '0';
-
-    if (!dot) {
-      result *= 10;
-      result += digit;
-    } else {
-      result += digit / power;
-      power *= 10;
-    }
+  if (ptr == end) [[unlikely]] {
+    return whole;
   }
 
-  return result * signum;
+  ptr++;
+
+  uint_fast32_t decimals = 0;
+  uint_fast32_t power = 10;
+
+#pragma clang loop unroll(disable)
+  while (ptr < end) {
+    decimals *= 10;
+    decimals += *ptr++ - '0';
+    power *= 10;
+  }
+
+  double fractional = static_cast<double>(decimals) / power;
+  double result = whole + (has_signum ? -fractional : fractional);
+
+  return result;
 }
 
 Stations read_stations(const std::filesystem::path &input_filepath) {
@@ -77,7 +87,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
   std::string file_string = oss.str();
 
   for (const auto &file_line :
-       std::views::split(file_string, '\n') | std::views::drop(1)) {
+       std::views::split(file_string, "\r\n"sv) | std::views::drop(1)) {
     if (file_line.empty()) {
       continue;
     }
@@ -101,13 +111,13 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     if (longitude_str == tokens.end()) {
       throw std::runtime_error("Failed to read longitude field.");
     }
-    float longitude = str_to_double(*longitude_str);
+    float longitude = str_to_double(std::string_view(*longitude_str));
 
     auto latitude_str = iterator++;
     if (latitude_str == tokens.end()) {
       throw std::runtime_error("Failed to read latitude field.");
     }
-    float latitude = str_to_double(*latitude_str);
+    float latitude = str_to_double(std::string_view(*latitude_str));
 
     stations.emplace_back(id, name, std::make_pair(latitude, longitude));
   }
@@ -153,13 +163,13 @@ void parse_line(const std::string_view line, const auto &callback) {
   if (value_str == tokens.end()) {
     throw std::runtime_error("Failed to read value field.");
   }
-  Temperature value = str_to_double(*value_str);
+  Temperature value = str_to_double(std::string_view(*value_str));
 
   callback(id, ordinal, year, month, day, value);
 }
 
 void process_measurements_serial(Stations &stations, std::string_view content) {
-  for (const auto line : std::views::split(content, '\n')) {
+  for (const auto line : std::views::split(content, "\r\n"sv)) {
     if (!line.empty()) {
       const auto callback = [&](const size_t id, const size_t ordinal,
                                 const Year year, const Month month,
@@ -184,12 +194,12 @@ void process_measurements_parallel(Stations &stations,
     auto chunk = content.substr(i);
 
     if (i > 0) {
-      size_t newline_index = chunk.find('\n');
-      chunk = chunk.substr(newline_index + 1);
+      size_t newline_index = chunk.find("\r\n"sv);
+      chunk = chunk.substr(newline_index + 2);
     }
 
     if (chunk.size() >= N) {
-      size_t newline_index = chunk.substr(N).find('\n');
+      size_t newline_index = chunk.substr(N).find("\r\n"sv);
       if (newline_index != std::string::npos) {
         chunk = chunk.substr(0, N + newline_index);
       }
@@ -217,9 +227,14 @@ void process_measurements_parallel(Stations &stations,
     };
 
     do {
-      size_t newline_index = std::min(chunk.find('\n'), chunk.size() - 1);
-      parse_line(chunk.substr(0, newline_index), callback);
-      chunk = chunk.substr(newline_index + 1);
+      decltype(chunk) next_chunk;
+      size_t newline_index = chunk.find("\r\n"sv);
+      if (newline_index != std::string::npos) {
+        next_chunk = chunk.substr(newline_index + 2);
+        chunk = chunk.substr(0, newline_index);
+      }
+      parse_line(chunk, callback);
+      chunk = next_chunk;
     } while (!chunk.empty());
 
     if (last_id != std::numeric_limits<size_t>::max()) {
