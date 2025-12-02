@@ -21,6 +21,7 @@ add_executable(
   src/main.cpp
   src/config.cpp
   src/outliers.cpp
+  src/parsing.cpp
   src/preprocessor.cpp
   src/renderer.cpp
   src/stats.cpp
