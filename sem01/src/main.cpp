@@ -25,8 +25,9 @@
  * Simpler and faster version of stoul optimized for raw speed with no error
  * or bounds checking.
  */
-size_t str_to_number(auto str) {
+size_t str_to_number(std::string_view str) {
   size_t result = 0;
+#pragma clang loop unroll(disable)
   for (const char c : str) {
     result *= 10;
     result += c - '0';
@@ -100,7 +101,7 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
     if (id_str == tokens.end()) {
       throw std::runtime_error("Failed to read id field.");
     }
-    size_t id = str_to_number(*id_str);
+    size_t id = str_to_number(std::string_view(*id_str));
 
     auto name_str = iterator++;
     if (name_str == tokens.end()) {
@@ -134,31 +135,31 @@ std::tuple<size_t, Measurement> parse_line(const std::string_view line) {
   if (id_str == tokens.end()) {
     throw std::runtime_error("Failed to read id field.");
   }
-  size_t id = str_to_number(*id_str);
+  size_t id = str_to_number(std::string_view(*id_str));
 
   auto ordinal_str = iterator++;
   if (ordinal_str == tokens.end()) {
     throw std::runtime_error("Failed to read ordinal field.");
   }
-  size_t ordinal = str_to_number(*ordinal_str);
+  size_t ordinal = str_to_number(std::string_view(*ordinal_str));
 
   auto year_str = iterator++;
   if (year_str == tokens.end()) {
     throw std::runtime_error("Failed to read year field.");
   }
-  Year year = str_to_number(*year_str);
+  Year year = str_to_number(std::string_view(*year_str));
 
   auto month_str = iterator++;
   if (month_str == tokens.end()) {
     throw std::runtime_error("Failed to read month field.");
   }
-  Month month = str_to_number(*month_str);
+  Month month = str_to_number(std::string_view(*month_str));
 
   auto day_str = iterator++;
   if (day_str == tokens.end()) {
     throw std::runtime_error("Failed to read day field.");
   }
-  Day day = str_to_number(*day_str);
+  Day day = str_to_number(std::string_view(*day_str));
 
   auto value_str = iterator++;
   if (value_str == tokens.end()) {
