@@ -1,8 +1,5 @@
 #include "parsing.hpp"
 #include "threadpool.hpp"
-#include <algorithm>
-#include <cmath>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -16,6 +13,25 @@ using std::operator""sv;
  * Simpler and faster version of stoul optimized for raw speed with no error
  * or bounds checking.
  */
+size_t str_to_number(std::string_view &str) {
+  size_t result = 0;
+  const auto *ptr = str.data();
+  const auto *end = str.end();
+  // disable loop unrolling, since the numbers are usually only a few digits
+  // long
+#pragma clang loop unroll(disable)
+  while (ptr < end) [[likely]] {
+    result *= 10;
+    result += *ptr++ - '0';
+
+    if (*ptr == ';') [[unlikely]] {
+      str = {ptr + 1, end};
+      return result;
+    }
+  }
+  return result;
+}
+// for stations
 size_t str_to_number(auto str) {
   size_t result = 0;
   // disable loop unrolling, since the numbers are usually only a few digits
@@ -56,13 +72,11 @@ double str_to_double(auto str) {
     return whole;
   }
 
-  ptr++;
-
   uint_fast32_t decimals = 0;
   uint_fast32_t power = 10;
 
 #pragma clang loop unroll(disable)
-  while (ptr < end) {
+  while (++ptr < end) {
     decimals *= 10;
     decimals += *ptr++ - '0';
     power *= 10;
@@ -125,16 +139,13 @@ Stations read_stations(const std::filesystem::path &input_filepath) {
   return stations;
 }
 
-void parse_line(const std::string_view line, const auto &callback) {
-  auto tokens = std::views::split(line, ';');
-  auto iterator = tokens.begin();
-
-  size_t id = str_to_number(*iterator++);
-  size_t ordinal = str_to_number(*iterator++);
-  Year year = str_to_number(*iterator++);
-  Month month = str_to_number(*iterator++);
-  Day day = str_to_number(*iterator++);
-  Temperature value = str_to_double(*iterator++);
+void parse_line(std::string_view line, const auto &callback) {
+  size_t id = str_to_number(line);
+  size_t ordinal = str_to_number(line);
+  Year year = str_to_number(line);
+  Month month = str_to_number(line);
+  Day day = str_to_number(line);
+  Temperature value = str_to_double(line);
 
   callback(id, ordinal, year, month, day, value);
 }
