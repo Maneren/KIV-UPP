@@ -26,8 +26,8 @@ valgrind: build
     valgrind --leak-check=full {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
 
 perf: build
-    perf record -F 20000 --call-graph=dwarf -o perf.serial.data {{ builddir }}/meteo --serial meteodata/stanice.csv meteodata/mereni.csv
-    perf record -F 20000 --call-graph=dwarf -o perf.parallel.data {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
+    perf record -F 32000 --call-graph=dwarf -m 128 -o perf.serial.data {{ builddir }}/meteo --serial meteodata/stanice.csv meteodata/mereni.csv
+    perf record -F 32000 --call-graph=dwarf -m 128 -o perf.parallel.data {{ builddir }}/meteo --parallel meteodata/stanice.csv meteodata/mereni.csv
     perf script -i perf.serial.data > perf.serial.script
     perf script -i perf.parallel.data > perf.parallel.script
 
