@@ -1,6 +1,6 @@
 builddir := justfile_directory() / "build"
 export CMAKE_EXPORT_COMPILE_COMMANDS := "1"
-export CXXFLAGS := "-march=native -flto=thin -O3"
+export CXXFLAGS := "-march=native -flto=thin -O3 -fno-plt"
 
 [private]
 default:
