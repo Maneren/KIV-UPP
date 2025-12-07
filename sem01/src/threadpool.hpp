@@ -223,6 +223,8 @@ public:
     }
   }
 
+  size_t size() const { return mWorkers.size(); }
+
 private:
   std::vector<std::jthread> mWorkers;
   std::queue<Task> mTasks;

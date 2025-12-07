@@ -1,8 +1,8 @@
 #pragma once
 
+#include "threadpool.hpp"
 #include <filesystem>
 #include <format>
-#include <thread>
 
 enum ProcessingMode { Serial, Parallel };
 
@@ -16,7 +16,7 @@ template <> struct std::formatter<ProcessingMode> {
       return std::format_to(ctx.out(), "serial");
     } else {
       return std::format_to(ctx.out(), "parallel ({} threads)",
-                            std::thread::hardware_concurrency());
+                            threadpool::pool.size());
     }
   }
 };
