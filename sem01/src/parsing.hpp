@@ -1,8 +1,9 @@
 #include "data.hpp"
 #include <filesystem>
 
-Stations read_stations(const std::filesystem::path &input_filepath);
+std::string read_file(const std::filesystem::path &input_filepath);
 
-void fill_measurements(Stations &stations,
-                       const std::filesystem::path &input_filepath,
+Stations parse_stations(const std::string &file_string);
+
+void fill_measurements(Stations &stations, const std::string &file_string,
                        bool parallel);

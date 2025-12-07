@@ -88,17 +88,8 @@ double str_to_double(auto str) {
   return result;
 }
 
-Stations read_stations(const std::filesystem::path &input_filepath) {
-  std::ifstream file(input_filepath);
-  if (!file.is_open()) {
-    throw std::runtime_error("Failed to open file.");
-  }
-
+Stations parse_stations(const std::string &file_string) {
   Stations stations;
-
-  std::ostringstream oss;
-  oss << file.rdbuf();
-  std::string file_string = oss.str();
 
   for (const auto &file_line :
        std::views::split(file_string, "\r\n"sv) | std::views::drop(1)) {
@@ -209,10 +200,7 @@ void process_measurements_parallel(Stations &stations,
   threadpool::pool.for_each(std::move(offsets), process_chunk);
 }
 
-void fill_measurements(Stations &stations,
-                       const std::filesystem::path &input_filepath,
-                       bool parallel) {
-
+std::string read_file(const std::filesystem::path &input_filepath) {
   auto size = std::filesystem::file_size(input_filepath);
   std::string file_string(size, '\0');
 
@@ -227,6 +215,11 @@ void fill_measurements(Stations &stations,
     throw std::runtime_error("Failed to read file.");
   }
 
+  return file_string;
+}
+
+void fill_measurements(Stations &stations, const std::string &file_string,
+                       bool parallel) {
   // skip header
   size_t newline_index = file_string.find("\r\n"sv);
 

@@ -38,20 +38,30 @@ int main(int argc, char *argv[]) {
 
   std::cout << std::format("{}\n", config);
 
-  const auto start = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::high_resolution_clock::now();
 
-  auto stations = read_stations(config.stations_file());
+  std::string stations_file = read_file(config.stations_file());
+  std::string measurements_file = read_file(config.measurements_file());
 
-  fill_measurements(stations, config.measurements_file(),
-                    config.mode() == Parallel);
+  auto elapsed = std::chrono::high_resolution_clock::now() - start;
 
-  const auto elapsed = std::chrono::high_resolution_clock::now() - start;
+  std::cout << std::format(
+      "Loaded input files in {} ms.\n",
+      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+
+  start = std::chrono::high_resolution_clock::now();
+
+  auto stations = parse_stations(stations_file);
+
+  fill_measurements(stations, measurements_file, config.mode() == Parallel);
 
   const auto measurements = std::ranges::fold_left(
       stations | std::views::transform([](const auto &station) {
         return station.measurements.size();
       }),
       0, std::plus<>{});
+
+  elapsed = std::chrono::high_resolution_clock::now() - start;
 
   std::cout << std::format(
       "Loaded data for {} stations and {} measurements in {} ms. "
